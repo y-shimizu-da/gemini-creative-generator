@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gemini クリエイティブ一括生成ツール</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-primary:#0f0f1a;
+  --bg-secondary:#1a1a2e;
+  --bg-card:#16213e;
+  --bg-input:#0d1b2a;
+  --accent:#e94560;
+  --accent-green:#00b894;
+  --accent-blue:#4361ee;
+  --accent-yellow:#f9c74f;
+  --text-primary:#eaeaea;
+  --text-secondary:#8892a4;
+  --border:#2a2a4a;
+  --radius:10px;
+  --shadow:0 4px 20px rgba(0,0,0,.3);
+}
+html{font-size:14px}
+body{
+  font-family:'Segoe UI','Hiragino Sans',sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  display:flex;
+  height:100vh;
+  overflow:hidden;
+}
+/* Sidebar */
+#sidebar{
+  width:340px;min-width:340px;
+  background:var(--bg-secondary);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow-y:auto;
+  padding:20px;
+  gap:18px;
+}
+#sidebar h1{font-size:1.1rem;color:var(--accent);display:flex;align-items:center;gap:8px}
+#sidebar h1 span{font-size:1.3rem}
+.section{display:flex;flex-direction:column;gap:8px}
+.section-label{font-size:.8rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+input[type=text],input[type=password],textarea,select{
+  background:var(--bg-input);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  color:var(--text-primary);
+  padding:10px 12px;
+  font-size:.9rem;
+  outline:none;
+  transition:border .2s;
+  font-family:inherit;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--accent-blue)}
+textarea{resize:vertical;min-height:120px;line-height:1.5}
+/* File upload zone */
+#upload-zone{
+  border:2px dashed var(--border);
+  border-radius:var(--radius);
+  padding:20px;
+  text-align:center;
+  cursor:pointer;
+  transition:border-color .2s,background .2s;
+  color:var(--text-secondary);
+  font-size:.85rem;
+}
+#upload-zone:hover,#upload-zone.dragover{border-color:var(--accent-blue);background:rgba(67,97,238,.08)}
+#upload-zone input{display:none}
+#preview-images{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+#preview-images .thumb{
+  position:relative;width:56px;height:56px;border-radius:6px;overflow:hidden;
+  border:1px solid var(--border);
+}
+#preview-images .thumb img{width:100%;height:100%;object-fit:cover}
+#preview-images .thumb .remove{
+  position:absolute;top:-4px;right:-4px;
+  background:var(--accent);color:#fff;border:none;
+  border-radius:50%;width:18px;height:18px;
+  font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  line-height:1;
+}
+/* Config row */
+.config-row{display:flex;gap:10px;align-items:center}
+.config-row label{font-size:.8rem;color:var(--text-secondary);white-space:nowrap}
+.config-row input[type=range]{flex:1;accent-color:var(--accent)}
+.config-row .range-val{
+  background:var(--bg-input);border:1px solid var(--border);
+  border-radius:6px;padding:2px 8px;font-size:.85rem;min-width:28px;text-align:center;
+}
+/* Buttons */
+.btn{
+  padding:10px 16px;border:none;border-radius:var(--radius);
+  font-size:.9rem;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:opacity .2s,transform .1s;
+  font-family:inherit;
+}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){opacity:.85}
+.btn-secondary{background:var(--accent-blue);color:#fff}
+.btn-secondary:hover:not(:disabled){opacity:.85}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-primary)}
+.btn-outline:hover:not(:disabled){border-color:var(--text-secondary)}
+.btn-group{display:flex;gap:8px}
+.btn-group .btn{flex:1}
+/* Status bar */
+#status-bar{
+  margin-top:auto;
+  padding:10px;
+  background:var(--bg-card);
+  border-radius:var(--radius);
+  font-size:.8rem;
+  color:var(--text-secondary);
+  display:flex;align-items:center;gap:8px;
+}
+#status-bar .dot{width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0}
+#status-bar .dot.active{background:var(--accent-green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* Progress bar */
+.progress-bar{
+  width:100%;height:4px;background:var(--bg-input);border-radius:2px;overflow:hidden;
+  margin-top:4px;
+}
+.progress-bar .fill{height:100%;background:var(--accent-green);transition:width .3s;width:0}
+
+/* Main */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+/* Round tabs */
+#round-tabs{
+  display:flex;gap:2px;padding:12px 20px 0;
+  background:var(--bg-secondary);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.round-tab{
+  padding:8px 18px;
+  border-radius:var(--radius) var(--radius) 0 0;
+  background:transparent;
+  border:1px solid transparent;
+  border-bottom:none;
+  color:var(--text-secondary);
+  cursor:pointer;font-size:.85rem;font-weight:600;
+  transition:all .2s;
+  font-family:inherit;
+}
+.round-tab:hover{color:var(--text-primary)}
+.round-tab.active{
+  background:var(--bg-primary);
+  border-color:var(--border);
+  color:var(--accent);
+}
+#no-rounds{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  flex:1;color:var(--text-secondary);gap:12px;font-size:.95rem;
+}
+#no-rounds .icon{font-size:3rem;opacity:.3}
+/* Results grid */
+#results-area{flex:1;overflow-y:auto;padding:20px}
+#results-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:16px;
+}
+/* Image card */
+.image-card{
+  background:var(--bg-card);
+  border-radius:var(--radius);
+  overflow:hidden;
+  border:2px solid transparent;
+  transition:border-color .3s,box-shadow .3s,opacity .3s;
+  position:relative;
+}
+.image-card.selected{border-color:var(--accent-green);box-shadow:0 0 20px rgba(0,184,148,.2)}
+.image-card.rejected{opacity:.35;border-color:rgba(233,69,96,.3)}
+.image-card .card-image{
+  width:100%;aspect-ratio:1;
+  background:var(--bg-input);
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;position:relative;
+}
+.image-card .card-image img{width:100%;height:100%;object-fit:contain}
+/* Skeleton loader */
+.image-card .skeleton{
+  width:100%;height:100%;
+  background:linear-gradient(90deg,var(--bg-input) 25%,var(--bg-card) 50%,var(--bg-input) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.5s infinite;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Error state */
+.image-card .card-error{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;color:var(--accent);font-size:.8rem;padding:20px;text-align:center;
+  width:100%;height:100%;
+}
+.image-card .card-error .err-icon{font-size:2rem}
+/* Card actions */
+.card-actions{
+  display:flex;gap:0;border-top:1px solid var(--border);
+}
+.card-actions button{
+  flex:1;padding:8px;background:transparent;
+  border:none;color:var(--text-secondary);
+  cursor:pointer;font-size:.8rem;
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  transition:background .2s,color .2s;
+  font-family:inherit;
+}
+.card-actions button:hover{background:rgba(255,255,255,.05);color:var(--text-primary)}
+.card-actions button.act-select:hover{color:var(--accent-green)}
+.card-actions button.act-reject:hover{color:var(--accent)}
+.card-actions button.act-select.on{color:var(--accent-green);background:rgba(0,184,148,.1)}
+.card-actions button.act-reject.on{color:var(--accent);background:rgba(233,69,96,.1)}
+/* Badge */
+.card-badge{
+  position:absolute;top:8px;right:8px;
+  padding:3px 10px;border-radius:20px;
+  font-size:.7rem;font-weight:700;
+  z-index:2;pointer-events:none;
+}
+.card-badge.badge-selected{background:var(--accent-green);color:#fff}
+.card-badge.badge-rejected{background:var(--accent);color:#fff}
+/* Toast */
+#toast-container{
+  position:fixed;bottom:20px;right:20px;
+  display:flex;flex-direction:column;gap:8px;
+  z-index:999;
+}
+.toast{
+  padding:10px 16px;border-radius:var(--radius);
+  font-size:.85rem;color:#fff;
+  animation:slideIn .3s;
+  max-width:320px;
+}
+.toast.success{background:var(--accent-green)}
+.toast.error{background:var(--accent)}
+.toast.info{background:var(--accent-blue)}
+@keyframes slideIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+/* Selection toolbar */
+#selection-toolbar{
+  display:none;
+  padding:10px 20px;
+  background:var(--bg-secondary);
+  border-top:1px solid var(--border);
+  gap:10px;align-items:center;
+  flex-shrink:0;
+}
+#selection-toolbar.visible{display:flex}
+#selection-toolbar .count{font-size:.85rem;color:var(--text-secondary);margin-right:auto}
+/* Responsive */
+@media(max-width:768px){
+  body{flex-direction:column}
+  #sidebar{width:100%;min-width:auto;max-height:45vh;border-right:none;border-bottom:1px solid var(--border)}
+}
+/* API key toggle */
+.key-row{display:flex;gap:6px}
+.key-row input{flex:1}
+.key-row button{
+  background:var(--bg-input);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text-secondary);
+  cursor:pointer;padding:0 10px;font-size:.9rem;
+}
+/* Aspect ratio select */
+select{cursor:pointer}
+select option{background:var(--bg-input)}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1><span>⚡</span> CR一括生成ツール</h1>
+
+  <div class="section">
+    <div class="section-label">APIキー</div>
+    <div class="key-row">
+      <input type="password" id="api-key" placeholder="Gemini APIキーを入力">
+      <button id="key-toggle" title="表示/非表示">👁</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">参考画像</div>
+    <div id="upload-zone">
+      <div>ドラッグ＆ドロップ または クリックで選択</div>
+      <div style="font-size:.75rem;margin-top:4px;color:var(--text-secondary)">PNG / JPG / WebP</div>
+      <input type="file" id="file-input" multiple accept="image/*">
+    </div>
+    <div id="preview-images"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">プロンプト</div>
+    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;例: デザインや構成を変えてクリエイティブを生成したい"></textarea>
+  </div>
+
+  <div class="section">
+    <div class="section-label">設定</div>
+    <div class="config-row">
+      <label>同時生成数</label>
+      <input type="range" id="parallel-count" min="1" max="10" value="5">
+      <span class="range-val" id="parallel-val">5</span>
+    </div>
+    <div class="config-row">
+      <label>アスペクト比</label>
+      <select id="aspect-ratio">
+        <option value="1:1">1:1 (正方形)</option>
+        <option value="16:9">16:9 (横長)</option>
+        <option value="9:16">9:16 (縦長)</option>
+        <option value="4:3">4:3</option>
+        <option value="3:4">3:4</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-primary" id="btn-generate">生成開始</button>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" id="btn-continue" disabled>選択画像で続行</button>
+    <button class="btn btn-outline" id="btn-download" disabled>DL</button>
+  </div>
+
+  <div id="status-bar">
+    <div class="dot" id="status-dot"></div>
+    <div id="status-text">待機中</div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="round-tabs"></div>
+  <div id="results-area">
+    <div id="no-rounds">
+      <div class="icon">🎨</div>
+      <div>プロンプトを入力して「生成開始」をクリック</div>
+    </div>
+    <div id="results-grid" style="display:none"></div>
+  </div>
+  <div id="selection-toolbar">
+    <span class="count" id="sel-count">0件選択中</span>
+    <button class="btn btn-outline" id="btn-select-all" style="padding:6px 12px;font-size:.8rem">全選択</button>
+    <button class="btn btn-outline" id="btn-deselect-all" style="padding:6px 12px;font-size:.8rem">全解除</button>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// ===== State =====
+const State = {
+  apiKey: localStorage.getItem('gemini-api-key') || '',
+  referenceImages: [], // [{name, base64, mimeType}]
+  prompt: '',
+  parallelCount: parseInt(localStorage.getItem('gemini-parallel-count')) || 5,
+  aspectRatio: localStorage.getItem('gemini-aspect-ratio') || '1:1',
+  rounds: [],
+  currentRound: -1,
+  generating: false,
+};
+
+// ===== DOM refs =====
+const $apiKey = document.getElementById('api-key');
+const $keyToggle = document.getElementById('key-toggle');
+const $uploadZone = document.getElementById('upload-zone');
+const $fileInput = document.getElementById('file-input');
+const $previewImages = document.getElementById('preview-images');
+const $prompt = document.getElementById('prompt');
+const $parallelCount = document.getElementById('parallel-count');
+const $parallelVal = document.getElementById('parallel-val');
+const $aspectRatio = document.getElementById('aspect-ratio');
+const $btnGenerate = document.getElementById('btn-generate');
+const $btnContinue = document.getElementById('btn-continue');
+const $btnDownload = document.getElementById('btn-download');
+const $statusDot = document.getElementById('status-dot');
+const $statusText = document.getElementById('status-text');
+const $roundTabs = document.getElementById('round-tabs');
+const $noRounds = document.getElementById('no-rounds');
+const $resultsGrid = document.getElementById('results-grid');
+const $selCount = document.getElementById('sel-count');
+const $selToolbar = document.getElementById('selection-toolbar');
+const $btnSelectAll = document.getElementById('btn-select-all');
+const $btnDeselectAll = document.getElementById('btn-deselect-all');
+
+// ===== Init =====
+$apiKey.value = State.apiKey;
+$parallelCount.value = State.parallelCount;
+$parallelVal.textContent = State.parallelCount;
+$aspectRatio.value = State.aspectRatio;
+
+// ===== API Key =====
+$apiKey.addEventListener('input', () => {
+  State.apiKey = $apiKey.value.trim();
+  localStorage.setItem('gemini-api-key', State.apiKey);
+});
+$keyToggle.addEventListener('click', () => {
+  $apiKey.type = $apiKey.type === 'password' ? 'text' : 'password';
+});
+
+// ===== Parallel count =====
+$parallelCount.addEventListener('input', () => {
+  State.parallelCount = parseInt($parallelCount.value);
+  $parallelVal.textContent = State.parallelCount;
+  localStorage.setItem('gemini-parallel-count', State.parallelCount);
+});
+
+// ===== Aspect ratio =====
+$aspectRatio.addEventListener('change', () => {
+  State.aspectRatio = $aspectRatio.value;
+  localStorage.setItem('gemini-aspect-ratio', State.aspectRatio);
+});
+
+// ===== File upload =====
+$uploadZone.addEventListener('click', () => $fileInput.click());
+$uploadZone.addEventListener('dragover', e => { e.preventDefault(); $uploadZone.classList.add('dragover'); });
+$uploadZone.addEventListener('dragleave', () => $uploadZone.classList.remove('dragover'));
+$uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  $uploadZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+$fileInput.addEventListener('change', () => { handleFiles($fileInput.files); $fileInput.value = ''; });
+
+async function handleFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const { base64, mimeType } = await fileToBase64(file);
+    State.referenceImages.push({ name: file.name, base64, mimeType });
+  }
+  renderPreviews();
+}
+
+function fileToBase64(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const base64 = dataUrl.split(',')[1];
+      resolve({ base64, mimeType: file.type });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPreviews() {
+  $previewImages.innerHTML = '';
+  State.referenceImages.forEach((img, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `<img src="data:${img.mimeType};base64,${img.base64}"><button class="remove" data-i="${i}">&times;</button>`;
+    $previewImages.appendChild(div);
+  });
+  $previewImages.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      State.referenceImages.splice(parseInt(btn.dataset.i), 1);
+      renderPreviews();
+    });
+  });
+}
+
+// ===== Prompt =====
+$prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
+
+// ===== Toast =====
+function showToast(msg, type = 'info') {
+  const div = document.createElement('div');
+  div.className = `toast ${type}`;
+  div.textContent = msg;
+  document.getElementById('toast-container').appendChild(div);
+  setTimeout(() => div.remove(), 3500);
+}
+
+// ===== Gemini API =====
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MODEL = 'gemini-2.0-flash-exp-image-generation';
+
+async function callGeminiAPI(parts) {
+  const url = `${API_BASE}/${MODEL}:generateContent?key=${State.apiKey}`;
+  const body = {
+    contents: [{ parts }],
+    generationConfig: {
+      responseModalities: ['TEXT', 'IMAGE'],
+    },
+  };
+  // Add aspect ratio config if supported
+  if (State.aspectRatio !== '1:1') {
+    body.generationConfig.imageConfig = { aspectRatio: State.aspectRatio };
+  }
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}));
+    const msg = errData?.error?.message || `HTTP ${resp.status}`;
+    throw new Error(msg);
+  }
+
+  const data = await resp.json();
+  const candidate = data.candidates?.[0];
+  if (!candidate) throw new Error('レスポンスが空です');
+
+  const imgPart = candidate.content?.parts?.find(p => p.inlineData);
+  const textPart = candidate.content?.parts?.find(p => p.text);
+
+  if (!imgPart) {
+    throw new Error(textPart?.text || '画像が生成されませんでした');
+  }
+
+  return {
+    imageBase64: imgPart.inlineData.data,
+    mimeType: imgPart.inlineData.mimeType || 'image/png',
+    text: textPart?.text || '',
+  };
+}
+
+// ===== Generation =====
+async function runGeneration(contextImages = []) {
+  if (!State.apiKey) { showToast('APIキーを入力してください', 'error'); return; }
+  if (!State.prompt.trim() && State.referenceImages.length === 0) {
+    showToast('プロンプトまたは参考画像を設定してください', 'error'); return;
+  }
+
+  State.generating = true;
+  updateButtons();
+
+  const roundIndex = State.rounds.length;
+  const round = {
+    id: roundIndex + 1,
+    results: Array.from({ length: State.parallelCount }, (_, i) => ({
+      id: `r${roundIndex}-${i}`,
+      status: 'loading',
+      imageBase64: null,
+      mimeType: 'image/png',
+      selection: 'none',
+      errorMessage: null,
+      text: '',
+    })),
+  };
+  State.rounds.push(round);
+  State.currentRound = roundIndex;
+  renderRoundTabs();
+  renderGrid();
+  setStatus('active', `生成中... (0/${State.parallelCount} 完了)`);
+
+  // Build parts
+  const parts = [];
+  if (State.prompt.trim()) {
+    let promptText = State.prompt.trim();
+    if (contextImages.length > 0) {
+      promptText += '\n\nこれらの参考画像のスタイルを維持しながら、新しいバリエーションを生成してください。';
+    }
+    parts.push({ text: promptText });
+  }
+  // Reference images
+  for (const img of State.referenceImages) {
+    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+  }
+  // Context images from previous round selection
+  for (const img of contextImages) {
+    parts.push({ inlineData: { mimeType: img.mimeType, data: img.imageBase64 } });
+  }
+
+  let completed = 0;
+
+  const promises = round.results.map((result, i) => {
+    // Stagger starts to avoid rate limits
+    return new Promise(resolve => setTimeout(resolve, i * 100))
+      .then(() => callGeminiAPIWithRetry(parts, 2))
+      .then(data => {
+        result.status = 'success';
+        result.imageBase64 = data.imageBase64;
+        result.mimeType = data.mimeType;
+        result.text = data.text;
+      })
+      .catch(err => {
+        result.status = 'error';
+        result.errorMessage = err.message;
+      })
+      .finally(() => {
+        completed++;
+        setStatus('active', `生成中... (${completed}/${State.parallelCount} 完了)`);
+        if (State.currentRound === roundIndex) renderGrid();
+      });
+  });
+
+  await Promise.allSettled(promises);
+
+  State.generating = false;
+  const successCount = round.results.filter(r => r.status === 'success').length;
+  const errorCount = round.results.filter(r => r.status === 'error').length;
+  setStatus('idle', `Round ${round.id}: ${successCount}件成功${errorCount > 0 ? ` / ${errorCount}件エラー` : ''}`);
+  updateButtons();
+  updateSelectionCount();
+}
+
+async function callGeminiAPIWithRetry(parts, maxRetries) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callGeminiAPI(parts);
+    } catch (err) {
+      if (attempt < maxRetries && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED'))) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// ===== Round Tabs =====
+function renderRoundTabs() {
+  $roundTabs.innerHTML = '';
+  if (State.rounds.length === 0) return;
+  State.rounds.forEach((round, i) => {
+    const btn = document.createElement('button');
+    btn.className = `round-tab${i === State.currentRound ? ' active' : ''}`;
+    btn.textContent = `Round ${round.id}`;
+    btn.addEventListener('click', () => {
+      State.currentRound = i;
+      renderRoundTabs();
+      renderGrid();
+      updateSelectionCount();
+    });
+    $roundTabs.appendChild(btn);
+  });
+}
+
+// ===== Grid Rendering =====
+function renderGrid() {
+  if (State.rounds.length === 0) {
+    $noRounds.style.display = 'flex';
+    $resultsGrid.style.display = 'none';
+    $selToolbar.classList.remove('visible');
+    return;
+  }
+  $noRounds.style.display = 'none';
+  $resultsGrid.style.display = 'grid';
+  $selToolbar.classList.add('visible');
+
+  const round = State.rounds[State.currentRound];
+  if (!round) return;
+
+  $resultsGrid.innerHTML = '';
+  round.results.forEach((result, i) => {
+    const card = document.createElement('div');
+    card.className = `image-card ${result.selection}`;
+    card.innerHTML = buildCardHTML(result, i);
+    $resultsGrid.appendChild(card);
+
+    // Bind card action buttons
+    const selectBtn = card.querySelector('.act-select');
+    const rejectBtn = card.querySelector('.act-reject');
+    const dlBtn = card.querySelector('.act-dl');
+    const refBtn = card.querySelector('.act-ref');
+
+    if (selectBtn) selectBtn.addEventListener('click', () => toggleSelection(result, 'selected', card));
+    if (rejectBtn) rejectBtn.addEventListener('click', () => toggleSelection(result, 'rejected', card));
+    if (dlBtn) dlBtn.addEventListener('click', () => downloadSingle(result, i));
+    if (refBtn) refBtn.addEventListener('click', () => addAsReference(result));
+  });
+}
+
+function buildCardHTML(result, index) {
+  let imageArea = '';
+  let badge = '';
+  let actions = '';
+
+  if (result.status === 'loading') {
+    imageArea = '<div class="skeleton"></div>';
+  } else if (result.status === 'error') {
+    imageArea = `<div class="card-error"><div class="err-icon">⚠</div><div>${escapeHtml(result.errorMessage)}</div></div>`;
+  } else {
+    imageArea = `<img src="data:${result.mimeType};base64,${result.imageBase64}" alt="Generated ${index + 1}">`;
+  }
+
+  if (result.selection === 'selected') badge = '<div class="card-badge badge-selected">採用</div>';
+  else if (result.selection === 'rejected') badge = '<div class="card-badge badge-rejected">不採用</div>';
+
+  if (result.status === 'success') {
+    actions = `<div class="card-actions">
+      <button class="act-select${result.selection === 'selected' ? ' on' : ''}">✓ 採用</button>
+      <button class="act-reject${result.selection === 'rejected' ? ' on' : ''}">✗ 不採用</button>
+      <button class="act-dl">↓</button>
+      <button class="act-ref" title="参考画像に追加">📎</button>
+    </div>`;
+  }
+
+  return `<div class="card-image">${badge}${imageArea}</div>${actions}`;
+}
+
+function toggleSelection(result, type, card) {
+  result.selection = result.selection === type ? 'none' : type;
+  card.className = `image-card ${result.selection}`;
+  // Re-render card content
+  const index = State.rounds[State.currentRound].results.indexOf(result);
+  card.innerHTML = buildCardHTML(result, index);
+  // Re-bind
+  const selectBtn = card.querySelector('.act-select');
+  const rejectBtn = card.querySelector('.act-reject');
+  const dlBtn = card.querySelector('.act-dl');
+  const refBtn = card.querySelector('.act-ref');
+  if (selectBtn) selectBtn.addEventListener('click', () => toggleSelection(result, 'selected', card));
+  if (rejectBtn) rejectBtn.addEventListener('click', () => toggleSelection(result, 'rejected', card));
+  if (dlBtn) dlBtn.addEventListener('click', () => downloadSingle(result, index));
+  if (refBtn) refBtn.addEventListener('click', () => addAsReference(result));
+
+  updateSelectionCount();
+  updateButtons();
+}
+
+function updateSelectionCount() {
+  if (State.rounds.length === 0) return;
+  const round = State.rounds[State.currentRound];
+  const count = round ? round.results.filter(r => r.selection === 'selected').length : 0;
+  $selCount.textContent = `${count}件選択中`;
+}
+
+// ===== Status =====
+function setStatus(mode, text) {
+  $statusDot.className = `dot${mode === 'active' ? ' active' : ''}`;
+  $statusText.textContent = text;
+}
+
+function updateButtons() {
+  $btnGenerate.disabled = State.generating;
+  $btnGenerate.textContent = State.generating ? '生成中...' : '生成開始';
+
+  const hasSelected = State.rounds.some(r => r.results.some(res => res.selection === 'selected'));
+  $btnContinue.disabled = State.generating || !hasSelected;
+  $btnDownload.disabled = !hasSelected;
+}
+
+// ===== Actions =====
+$btnGenerate.addEventListener('click', () => runGeneration());
+
+$btnContinue.addEventListener('click', () => {
+  const selectedImages = [];
+  State.rounds.forEach(round => {
+    round.results.forEach(r => {
+      if (r.selection === 'selected' && r.status === 'success') {
+        selectedImages.push(r);
+      }
+    });
+  });
+  if (selectedImages.length === 0) { showToast('画像を選択してください', 'error'); return; }
+  runGeneration(selectedImages);
+});
+
+$btnDownload.addEventListener('click', () => {
+  let count = 0;
+  State.rounds.forEach(round => {
+    round.results.forEach((r, i) => {
+      if (r.selection === 'selected' && r.status === 'success') {
+        count++;
+        setTimeout(() => downloadSingle(r, count), count * 200);
+      }
+    });
+  });
+  if (count > 0) showToast(`${count}件の画像をダウンロード中...`, 'success');
+});
+
+$btnSelectAll.addEventListener('click', () => {
+  const round = State.rounds[State.currentRound];
+  if (!round) return;
+  round.results.forEach(r => { if (r.status === 'success') r.selection = 'selected'; });
+  renderGrid();
+  updateSelectionCount();
+  updateButtons();
+});
+
+$btnDeselectAll.addEventListener('click', () => {
+  const round = State.rounds[State.currentRound];
+  if (!round) return;
+  round.results.forEach(r => { r.selection = 'none'; });
+  renderGrid();
+  updateSelectionCount();
+  updateButtons();
+});
+
+function downloadSingle(result, index) {
+  const ext = result.mimeType.split('/')[1] || 'png';
+  const a = document.createElement('a');
+  a.href = `data:${result.mimeType};base64,${result.imageBase64}`;
+  a.download = `creative_${String(index).padStart(3, '0')}.${ext}`;
+  a.click();
+}
+
+function addAsReference(result) {
+  State.referenceImages.push({
+    name: `generated_${Date.now()}.png`,
+    base64: result.imageBase64,
+    mimeType: result.mimeType,
+  });
+  renderPreviews();
+  showToast('参考画像に追加しました', 'success');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
