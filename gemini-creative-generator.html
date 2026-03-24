@@ -307,6 +307,14 @@ select option{background:var(--bg-input)}
       <span class="range-val" id="parallel-val">5</span>
     </div>
     <div class="config-row">
+      <label>モデル</label>
+      <select id="model-select">
+        <option value="gemini-2.5-flash-image">2.5 Flash Image</option>
+        <option value="gemini-3.1-flash-image-preview">3.1 Flash Image (NanoBanana2)</option>
+        <option value="gemini-3-pro-image-preview">3 Pro Image</option>
+      </select>
+    </div>
+    <div class="config-row">
       <label>アスペクト比</label>
       <select id="aspect-ratio">
         <option value="1:1">1:1 (正方形)</option>
@@ -385,6 +393,7 @@ const $selCount = document.getElementById('sel-count');
 const $selToolbar = document.getElementById('selection-toolbar');
 const $btnSelectAll = document.getElementById('btn-select-all');
 const $btnDeselectAll = document.getElementById('btn-deselect-all');
+const $modelSelect = document.getElementById('model-select');
 
 // ===== Init =====
 $apiKey.value = State.apiKey;
@@ -475,26 +484,36 @@ function showToast(msg, type = 'info') {
   setTimeout(() => div.remove(), 3500);
 }
 
+// ===== Model select =====
+$modelSelect.value = localStorage.getItem('gemini-model') || 'gemini-2.5-flash-image';
+State.model = $modelSelect.value;
+$modelSelect.addEventListener('change', () => {
+  State.model = $modelSelect.value;
+  localStorage.setItem('gemini-model', State.model);
+});
+
 // ===== Gemini API =====
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-2.0-flash-exp-image-generation';
 
 async function callGeminiAPI(parts) {
-  const url = `${API_BASE}/${MODEL}:generateContent?key=${State.apiKey}`;
+  const model = State.model || 'gemini-2.5-flash-image';
+  const url = `${API_BASE}/${model}:generateContent`;
   const body = {
     contents: [{ parts }],
     generationConfig: {
       responseModalities: ['TEXT', 'IMAGE'],
     },
   };
-  // Add aspect ratio config if supported
   if (State.aspectRatio !== '1:1') {
     body.generationConfig.imageConfig = { aspectRatio: State.aspectRatio };
   }
 
   const resp = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': State.apiKey,
+    },
     body: JSON.stringify(body),
   });
 
