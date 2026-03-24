@@ -317,12 +317,19 @@ select option{background:var(--bg-input)}
     <div class="config-row">
       <label>アスペクト比</label>
       <select id="aspect-ratio">
-        <option value="1:1">1:1 (正方形)</option>
-        <option value="16:9">16:9 (横長)</option>
-        <option value="9:16">9:16 (縦長)</option>
-        <option value="4:3">4:3</option>
-        <option value="3:4">3:4</option>
+        <option value="1:1" data-w="1080" data-h="1080">1080×1080 (Meta/Instagram正方形)</option>
+        <option value="1:1" data-w="600" data-h="600">600×600 (GDN正方形)</option>
+        <option value="16:9" data-w="1200" data-h="628">1200×628 (Meta横長/GDN)</option>
+        <option value="16:9" data-w="1920" data-h="1080">1920×1080 (YouTube横長)</option>
+        <option value="9:16" data-w="1080" data-h="1920">1080×1920 (ストーリーズ/リール)</option>
+        <option value="4:5" data-w="1080" data-h="1350">1080×1350 (Instagram縦長)</option>
+        <option value="3:4" data-w="1080" data-h="1440">1080×1440 (3:4縦長)</option>
       </select>
+    </div>
+    <div class="config-row">
+      <label>多様性</label>
+      <input type="range" id="temperature" min="0" max="20" value="16" step="1">
+      <span class="range-val" id="temp-val">1.6</span>
     </div>
   </div>
 
@@ -394,6 +401,8 @@ const $selToolbar = document.getElementById('selection-toolbar');
 const $btnSelectAll = document.getElementById('btn-select-all');
 const $btnDeselectAll = document.getElementById('btn-deselect-all');
 const $modelSelect = document.getElementById('model-select');
+const $temperature = document.getElementById('temperature');
+const $tempVal = document.getElementById('temp-val');
 
 // ===== Init =====
 $apiKey.value = State.apiKey;
@@ -418,9 +427,23 @@ $parallelCount.addEventListener('input', () => {
 });
 
 // ===== Aspect ratio =====
-$aspectRatio.addEventListener('change', () => {
-  State.aspectRatio = $aspectRatio.value;
-  localStorage.setItem('gemini-aspect-ratio', State.aspectRatio);
+function updateAspectState() {
+  const opt = $aspectRatio.options[$aspectRatio.selectedIndex];
+  State.aspectRatio = opt.value;
+  State.targetW = parseInt(opt.dataset.w);
+  State.targetH = parseInt(opt.dataset.h);
+  localStorage.setItem('gemini-aspect-ratio-index', $aspectRatio.selectedIndex);
+}
+const savedAspectIndex = localStorage.getItem('gemini-aspect-ratio-index');
+if (savedAspectIndex !== null) $aspectRatio.selectedIndex = savedAspectIndex;
+updateAspectState();
+$aspectRatio.addEventListener('change', updateAspectState);
+
+// ===== Temperature =====
+State.temperature = parseInt($temperature.value) / 10;
+$temperature.addEventListener('input', () => {
+  State.temperature = parseInt($temperature.value) / 10;
+  $tempVal.textContent = State.temperature.toFixed(1);
 });
 
 // ===== File upload =====
@@ -472,6 +495,33 @@ function renderPreviews() {
   });
 }
 
+// ===== Resize image to exact pixel dimensions =====
+function resizeImageToPixels(base64, mimeType, targetW, targetH) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      // Draw with cover-fit (fill entire canvas, crop excess)
+      const scale = Math.max(targetW / img.width, targetH / img.height);
+      const sw = targetW / scale;
+      const sh = targetH / scale;
+      const sx = (img.width - sw) / 2;
+      const sy = (img.height - sh) / 2;
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+      const outType = mimeType === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+      const dataUrl = canvas.toDataURL(outType, 0.95);
+      resolve({
+        base64: dataUrl.split(',')[1],
+        mimeType: outType,
+      });
+    };
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+}
+
 // ===== Prompt =====
 $prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
 
@@ -502,6 +552,7 @@ async function callGeminiAPI(parts) {
     contents: [{ parts }],
     generationConfig: {
       responseModalities: ['TEXT', 'IMAGE'],
+      temperature: State.temperature ?? 1.6,
     },
   };
   if (State.aspectRatio !== '1:1') {
@@ -570,34 +621,92 @@ async function runGeneration(contextImages = []) {
   renderGrid();
   setStatus('active', `生成中... (0/${State.parallelCount} 完了)`);
 
-  // Build parts
-  const parts = [];
-  if (State.prompt.trim()) {
-    let promptText = State.prompt.trim();
-    if (contextImages.length > 0) {
-      promptText += '\n\nこれらの参考画像のスタイルを維持しながら、新しいバリエーションを生成してください。';
+  // Style variations to ensure diverse outputs
+  // Style variations - mostly single-image, a few multi-panel allowed
+  const styleVariations = [
+    // 1枚絵系（大半）
+    '背景全体に商品写真を大きく1枚使い、上にキャッチコピーを重ねる。画像は1枚構成で。',
+    '人物の写真を中心に1枚配置し、感情に訴えるコピーを添える。画像は1枚構成で。',
+    'グラデーション背景に商品パッケージと大きな文字のみ。シンプルな1枚構成。',
+    '暖色系の単色背景。商品を中央に配置し、周囲に装飾的なテキスト。1枚の完成画像。',
+    '寒色系の落ち着いた単色背景。信頼感のあるプロフェッショナルな1枚。',
+    'ナチュラル・オーガニックな写真背景に溶け込むテキスト。1枚の完成画像。',
+    '鮮やかなポップカラーの背景に、太くて目立つキャッチコピー。1枚の完成画像。',
+    'ダーク背景にゴールドや白のテキスト。プレミアム感のある1枚。',
+    '手書き風フォントと柔らかい色合い。親しみやすさを重視した1枚。',
+    '大きな数字（割引率・実績）を画面中央にドンと配置するインパクト型の1枚。',
+    'ライフスタイル写真の上に半透明オーバーレイでテキストを重ねる1枚。',
+    'マガジン広告風。1枚の印象的な写真の上に洗練されたタイポグラフィ。',
+    'パステルカラーの優しいトーン。女性向けの柔らかい雰囲気の1枚。',
+    'フラットデザイン。イラスト的な要素と大きな文字で構成した1枚。',
+    '斜めのカラーブロックで画面を区切り、片側に写真、片側にコピーの1枚。',
+    // 分割・比較系（少数）
+    'ビフォーアフター構成。左右2分割で変化を視覚的に伝えるレイアウト。',
+    '上下または左右に2〜3枚の写真を並べたコラージュ風の構成。',
+    '複数のステップや特徴を並べて紹介するレイアウト。',
+  ];
+
+  // Build per-call parts with unique style variation
+  function buildPartsForCall(index) {
+    const callParts = [];
+    if (State.prompt.trim()) {
+      let promptText = State.prompt.trim();
+      if (contextImages.length > 0) {
+        promptText += '\n\nこれらの参考画像のテイストを参考にしつつ、新しいバリエーションを1枚だけ生成してください。';
+      }
+      const variation = styleVariations[index % styleVariations.length];
+      const systemInstruction = `あなたは広告クリエイティブデザイナーです。以下のルールを守って広告画像を生成してください。
+
+【ルール】
+1. そのまま広告媒体に入稿できる、完成された広告バナーを出力してください。
+2. 「Design A」「パターン1」などのラベルや、デザインの説明文・注釈は画像内に入れないでください。
+3. 「デザイン案の比較」として複数案を並べるのではなく、1つの完成されたクリエイティブとして出力してください。
+4. 画像サイズは${State.targetW}×${State.targetH}pxの構図で作成してください。
+5. テキストは読みやすいフォントで出力し、参考画像のコピーを踏襲してください。
+
+【デザインスタイル】
+${variation}
+
+【広告の内容】
+`;
+      callParts.push({ text: systemInstruction + promptText });
     }
-    parts.push({ text: promptText });
-  }
-  // Reference images
-  for (const img of State.referenceImages) {
-    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
-  }
-  // Context images from previous round selection
-  for (const img of contextImages) {
-    parts.push({ inlineData: { mimeType: img.mimeType, data: img.imageBase64 } });
+    // Reference images - shuffle subset for variety if many images
+    const refImages = [...State.referenceImages];
+    if (refImages.length > 3) {
+      // Shuffle and pick a subset to create variety
+      for (let j = refImages.length - 1; j > 0; j--) {
+        const k = Math.floor(Math.random() * (j + 1));
+        [refImages[j], refImages[k]] = [refImages[k], refImages[j]];
+      }
+      const subsetSize = Math.max(2, Math.ceil(refImages.length * 0.6));
+      refImages.length = subsetSize;
+    }
+    for (const img of refImages) {
+      callParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+    }
+    // Context images from previous round selection
+    for (const img of contextImages) {
+      callParts.push({ inlineData: { mimeType: img.mimeType, data: img.imageBase64 } });
+    }
+    return callParts;
   }
 
   let completed = 0;
 
   const promises = round.results.map((result, i) => {
+    const callParts = buildPartsForCall(i);
     // Stagger starts to avoid rate limits
     return new Promise(resolve => setTimeout(resolve, i * 100))
-      .then(() => callGeminiAPIWithRetry(parts, 2))
-      .then(data => {
+      .then(() => callGeminiAPIWithRetry(callParts, 2))
+      .then(async data => {
+        // Resize to exact pixel dimensions
+        const resized = await resizeImageToPixels(
+          data.imageBase64, data.mimeType, State.targetW, State.targetH
+        );
         result.status = 'success';
-        result.imageBase64 = data.imageBase64;
-        result.mimeType = data.mimeType;
+        result.imageBase64 = resized.base64;
+        result.mimeType = resized.mimeType;
         result.text = data.text;
       })
       .catch(err => {
@@ -624,9 +733,13 @@ async function runGeneration(contextImages = []) {
 async function callGeminiAPIWithRetry(parts, maxRetries) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await callGeminiAPI(parts);
+      const result = await callGeminiAPI(parts);
+      return result;
     } catch (err) {
-      if (attempt < maxRetries && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED'))) {
+      const isRetryable = err.message.includes('429')
+        || err.message.includes('RESOURCE_EXHAUSTED')
+        || err.message.includes('画像が生成されませんでした');
+      if (attempt < maxRetries && isRetryable) {
         await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
         continue;
       }
