@@ -295,8 +295,11 @@ select option{background:var(--bg-input)}
   </div>
 
   <div class="section">
-    <div class="section-label">プロンプト</div>
-    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;例: デザインや構成を変えてクリエイティブを生成したい"></textarea>
+    <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+      プロンプト
+      <button id="btn-template" class="btn btn-outline" style="padding:3px 8px;font-size:.7rem">テンプレを挿入</button>
+    </div>
+    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;「テンプレを挿入」ボタンで参考例を挿入できます"></textarea>
   </div>
 
   <div class="section">
@@ -524,6 +527,32 @@ function resizeImageToPixels(base64, mimeType, targetW, targetH) {
 
 // ===== Prompt =====
 $prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
+
+const PROMPT_TEMPLATE = `＃依頼
+クリエイティブのコピーは変えず、デザインや構成を変えてクリエイティブを生成したい
+1枚目：デザインA
+2枚目：デザインB
+3枚目：デザインC
+
+#条件
+・現在配信している記事LPや、デマンドジェネレーションで配信しているテキストを送るので、そこを把握したうえでマーケティング戦略の理解をしてください。
+
+
+#成果の良いコピー
+・
+・
+・
+
+#以下に記事LPの本文やリサーチ情報を記載
+`;
+
+document.getElementById('btn-template').addEventListener('click', () => {
+  if ($prompt.value.trim() && !confirm('現在のプロンプトを上書きしますか？')) return;
+  $prompt.value = PROMPT_TEMPLATE;
+  State.prompt = PROMPT_TEMPLATE;
+  $prompt.focus();
+  showToast('テンプレートを挿入しました', 'info');
+});
 
 // ===== Toast =====
 function showToast(msg, type = 'info') {
