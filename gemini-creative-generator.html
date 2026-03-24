@@ -593,7 +593,7 @@ async function callGeminiAPI(parts) {
 }
 
 // ===== Generation =====
-async function runGeneration(contextImages = []) {
+async function runGeneration(contextImages = [], rejectedImages = []) {
   if (!State.apiKey) { showToast('APIキーを入力してください', 'error'); return; }
   if (!State.prompt.trim() && State.referenceImages.length === 0) {
     showToast('プロンプトまたは参考画像を設定してください', 'error'); return;
@@ -652,7 +652,10 @@ async function runGeneration(contextImages = []) {
     if (State.prompt.trim()) {
       let promptText = State.prompt.trim();
       if (contextImages.length > 0) {
-        promptText += '\n\nこれらの参考画像のテイストを参考にしつつ、新しいバリエーションを1枚だけ生成してください。';
+        promptText += '\n\nこれらの「良い例」の画像のテイストを参考にしつつ、新しいバリエーションを生成してください。';
+      }
+      if (rejectedImages.length > 0) {
+        promptText += '\n\nまた「悪い例」の画像も添付します。これらとは異なるデザイン・構成・配色にしてください。悪い例のスタイルやレイアウトを避けてください。';
       }
       const variation = styleVariations[index % styleVariations.length];
       const systemInstruction = `あなたは広告クリエイティブデザイナーです。以下のルールを守って広告画像を生成してください。
@@ -674,7 +677,6 @@ ${variation}
     // Reference images - shuffle subset for variety if many images
     const refImages = [...State.referenceImages];
     if (refImages.length > 3) {
-      // Shuffle and pick a subset to create variety
       for (let j = refImages.length - 1; j > 0; j--) {
         const k = Math.floor(Math.random() * (j + 1));
         [refImages[j], refImages[k]] = [refImages[k], refImages[j]];
@@ -685,9 +687,21 @@ ${variation}
     for (const img of refImages) {
       callParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
     }
-    // Context images from previous round selection
-    for (const img of contextImages) {
-      callParts.push({ inlineData: { mimeType: img.mimeType, data: img.imageBase64 } });
+    // Good examples (selected images from previous rounds)
+    if (contextImages.length > 0) {
+      callParts.push({ text: '以下は「良い例」です。このテイストを参考にしてください：' });
+      for (const img of contextImages) {
+        callParts.push({ inlineData: { mimeType: img.mimeType, data: img.imageBase64 } });
+      }
+    }
+    // Bad examples (rejected images as negative feedback)
+    if (rejectedImages.length > 0) {
+      // Send max 3 rejected images to avoid token bloat
+      const rejects = rejectedImages.slice(0, 3);
+      callParts.push({ text: '以下は「悪い例」です。これらのデザイン・構図・配色は避けてください：' });
+      for (const img of rejects) {
+        callParts.push({ inlineData: { mimeType: img.mimeType, data: img.imageBase64 } });
+      }
     }
     return callParts;
   }
@@ -876,15 +890,17 @@ $btnGenerate.addEventListener('click', () => runGeneration());
 
 $btnContinue.addEventListener('click', () => {
   const selectedImages = [];
+  const rejectedImages = [];
   State.rounds.forEach(round => {
     round.results.forEach(r => {
-      if (r.selection === 'selected' && r.status === 'success') {
-        selectedImages.push(r);
+      if (r.status === 'success') {
+        if (r.selection === 'selected') selectedImages.push(r);
+        else if (r.selection === 'rejected') rejectedImages.push(r);
       }
     });
   });
   if (selectedImages.length === 0) { showToast('画像を選択してください', 'error'); return; }
-  runGeneration(selectedImages);
+  runGeneration(selectedImages, rejectedImages);
 });
 
 $btnDownload.addEventListener('click', () => {
