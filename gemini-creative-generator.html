@@ -259,6 +259,30 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 }
 #selection-toolbar.visible{display:flex}
 #selection-toolbar .count{font-size:.85rem;color:var(--text-secondary);margin-right:auto}
+/* Modal shared */
+.modal-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.modal-header h3{margin:0;font-size:1.1rem;color:var(--text-primary)}
+.modal-close{background:none;border:none;color:var(--text-secondary);font-size:1.5rem;cursor:pointer;padding:0 4px}
+.modal-close:hover{color:var(--text-primary)}
+/* Resize Modal */
+#resize-modal{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;display:flex;align-items:center;justify-content:center}
+#resize-modal-content{position:relative;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;width:90vw;max-width:640px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+#resize-body{padding:20px;overflow-y:auto}
+#resize-description{font-size:.85rem;color:var(--text-secondary);margin-bottom:16px;line-height:1.5}
+.resize-format-option{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;font-size:.85rem;color:var(--text-primary);transition:border-color .2s}
+.resize-format-option:hover{border-color:var(--accent-light)}
+.resize-format-option input{accent-color:var(--accent)}
+#resize-source-info{margin-top:12px;font-size:.85rem;color:var(--text-secondary)}
+#resize-progress-bar-bg{width:100%;height:6px;background:var(--bg-input);border-radius:3px;margin-top:8px;overflow:hidden}
+#resize-progress-bar{height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .3s}
+#resize-progress-text{font-size:.85rem;color:var(--text-secondary);margin-top:12px}
+#resize-results{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+.resize-result-group{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.resize-result-header{padding:8px 12px;background:var(--bg-input);font-size:.85rem;font-weight:600;color:var(--text-primary);display:flex;justify-content:space-between;align-items:center}
+.resize-result-images{display:flex;flex-wrap:wrap;gap:8px;padding:8px}
+.resize-result-images img{max-height:150px;border-radius:6px;cursor:pointer;border:2px solid transparent;object-fit:contain}
+.resize-result-images img:hover{border-color:var(--accent)}
 /* Edit Modal */
 #edit-modal{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;display:flex;align-items:center;justify-content:center}
 #edit-modal-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
@@ -363,6 +387,7 @@ select option{background:var(--bg-input)}
   </div>
   <div class="btn-group">
     <button class="btn btn-secondary" id="btn-continue" disabled>選択画像で続行</button>
+    <button class="btn btn-outline" id="btn-resize" disabled>リサイズ変換</button>
     <button class="btn btn-outline" id="btn-download" disabled>DL</button>
   </div>
 
@@ -390,6 +415,39 @@ select option{background:var(--bg-input)}
 </div>
 
 <div id="toast-container"></div>
+
+<!-- Resize Modal -->
+<div id="resize-modal" style="display:none">
+  <div class="modal-overlay" data-close="resize"></div>
+  <div id="resize-modal-content">
+    <div class="modal-header">
+      <h3>採用画像をリサイズ変換</h3>
+      <button class="modal-close" data-close="resize">&times;</button>
+    </div>
+    <div id="resize-body">
+      <div id="resize-description">
+        採用画像を選択したフォーマットに変換します。<br>
+        Gemini AIがレイアウトを最適化して再構成します。
+      </div>
+      <div id="resize-formats">
+        <div class="section-label" style="margin-bottom:8px">変換先フォーマット（複数選択可）</div>
+        <label class="resize-format-option"><input type="checkbox" value="1080x1080" data-label="Meta/Instagram正方形"> 1080×1080 (Meta/Instagram正方形)</label>
+        <label class="resize-format-option"><input type="checkbox" value="600x600" data-label="GDN正方形"> 600×600 (GDN正方形)</label>
+        <label class="resize-format-option"><input type="checkbox" value="1200x628" data-label="Meta横長/GDN"> 1200×628 (Meta横長/GDN)</label>
+        <label class="resize-format-option"><input type="checkbox" value="1920x1080" data-label="YouTube横長"> 1920×1080 (YouTube横長)</label>
+        <label class="resize-format-option"><input type="checkbox" value="1080x1920" data-label="ストーリーズ/リール"> 1080×1920 (ストーリーズ/リール)</label>
+        <label class="resize-format-option"><input type="checkbox" value="1080x1350" data-label="Instagram縦長"> 1080×1350 (Instagram縦長)</label>
+      </div>
+      <div id="resize-source-info"></div>
+      <button class="btn btn-primary" id="btn-resize-start" style="width:100%;margin-top:12px">変換開始</button>
+      <div id="resize-progress" style="display:none">
+        <div id="resize-progress-text">変換中...</div>
+        <div id="resize-progress-bar-bg"><div id="resize-progress-bar"></div></div>
+      </div>
+      <div id="resize-results"></div>
+    </div>
+  </div>
+</div>
 
 <!-- Edit Modal -->
 <div id="edit-modal" style="display:none">
@@ -441,6 +499,7 @@ const $aspectRatio = document.getElementById('aspect-ratio');
 const $btnGenerate = document.getElementById('btn-generate');
 const $btnContinue = document.getElementById('btn-continue');
 const $btnDownload = document.getElementById('btn-download');
+const $btnResize = document.getElementById('btn-resize');
 const $statusDot = document.getElementById('status-dot');
 const $statusText = document.getElementById('status-text');
 const $roundTabs = document.getElementById('round-tabs');
@@ -974,6 +1033,7 @@ function updateButtons() {
   const hasSelected = State.rounds.some(r => r.results.some(res => res.selection === 'selected'));
   $btnContinue.disabled = State.generating || !hasSelected;
   $btnDownload.disabled = !hasSelected;
+  $btnResize.disabled = !hasSelected;
 }
 
 // ===== Actions =====
@@ -1088,6 +1148,150 @@ function addAsReference(result) {
   renderPreviews();
   showToast('参考画像に追加しました', 'success');
 }
+
+// ===== Resize Modal =====
+const $resizeModal = document.getElementById('resize-modal');
+
+function openResizeModal() {
+  // Count selected images
+  const selected = [];
+  State.rounds.forEach(round => {
+    round.results.forEach(r => {
+      if (r.selection === 'selected' && r.status === 'success') selected.push(r);
+    });
+  });
+  if (selected.length === 0) { showToast('採用画像がありません', 'error'); return; }
+
+  document.getElementById('resize-source-info').textContent = `採用画像: ${selected.length}枚`;
+  document.getElementById('resize-results').innerHTML = '';
+  document.getElementById('resize-progress').style.display = 'none';
+  document.getElementById('btn-resize-start').disabled = false;
+  document.getElementById('btn-resize-start').textContent = '変換開始';
+  // Uncheck all
+  $resizeModal.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+  $resizeModal.style.display = 'flex';
+}
+
+function closeResizeModal() { $resizeModal.style.display = 'none'; }
+
+$resizeModal.querySelector('.modal-overlay').addEventListener('click', closeResizeModal);
+$resizeModal.querySelector('.modal-close').addEventListener('click', closeResizeModal);
+$btnResize.addEventListener('click', openResizeModal);
+
+document.getElementById('btn-resize-start').addEventListener('click', async () => {
+  const checkedFormats = [];
+  $resizeModal.querySelectorAll('#resize-formats input:checked').forEach(cb => {
+    const [w, h] = cb.value.split('x').map(Number);
+    checkedFormats.push({ w, h, label: cb.dataset.label, key: cb.value });
+  });
+  if (checkedFormats.length === 0) { showToast('変換先フォーマットを選択してください', 'error'); return; }
+
+  const selected = [];
+  State.rounds.forEach(round => {
+    round.results.forEach((r, i) => {
+      if (r.selection === 'selected' && r.status === 'success') selected.push(r);
+    });
+  });
+
+  const totalJobs = selected.length * checkedFormats.length;
+  let completedJobs = 0;
+
+  const $progress = document.getElementById('resize-progress');
+  const $progressBar = document.getElementById('resize-progress-bar');
+  const $progressText = document.getElementById('resize-progress-text');
+  const $results = document.getElementById('resize-results');
+  const $startBtn = document.getElementById('btn-resize-start');
+
+  $startBtn.disabled = true;
+  $progress.style.display = 'block';
+  $results.innerHTML = '';
+  $progressBar.style.width = '0%';
+  $progressText.textContent = `変換中... (0/${totalJobs})`;
+
+  // Create result groups per format
+  const formatGroups = {};
+  checkedFormats.forEach(fmt => {
+    const group = document.createElement('div');
+    group.className = 'resize-result-group';
+    group.innerHTML = `<div class="resize-result-header">
+      <span>${fmt.w}×${fmt.h} (${fmt.label})</span>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:.75rem" data-dl-format="${fmt.key}">全てDL</button>
+    </div><div class="resize-result-images" id="resize-imgs-${fmt.key}"></div>`;
+    $results.appendChild(group);
+    formatGroups[fmt.key] = { images: [], container: group.querySelector('.resize-result-images') };
+
+    group.querySelector(`[data-dl-format="${fmt.key}"]`).addEventListener('click', () => {
+      formatGroups[fmt.key].images.forEach((img, idx) => {
+        setTimeout(() => {
+          const a = document.createElement('a');
+          a.href = `data:${img.mimeType};base64,${img.base64}`;
+          a.download = `creative_${fmt.key}_${idx + 1}.png`;
+          a.click();
+        }, idx * 200);
+      });
+    });
+  });
+
+  // Process each image × format combination sequentially with stagger
+  for (const result of selected) {
+    for (const fmt of checkedFormats) {
+      // Determine aspect ratio string for API
+      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+      const g = gcd(fmt.w, fmt.h);
+      const ratioW = fmt.w / g;
+      const ratioH = fmt.h / g;
+
+      const parts = [
+        { text: `この画像を${fmt.w}×${fmt.h}ピクセル（${fmt.label}）用にリサイズ・再構成してください。
+
+【重要ルール】
+・元画像のデザイン要素（テキスト、画像、色使い、ブランド要素）は全て維持してください。
+・新しいアスペクト比（${ratioW}:${ratioH}）に合わせて、レイアウトを最適に再配置してください。
+・テキストの内容は一字一句変えないでください。
+・余白の追加や要素の配置変更で、新しいサイズに自然にフィットさせてください。
+・画像は1枚だけ出力してください。` },
+        { inlineData: { mimeType: result.mimeType, data: result.imageBase64 } }
+      ];
+
+      try {
+        const data = await callGeminiAPIWithRetry(parts, 2);
+        const resized = await resizeImageToPixels(data.imageBase64, data.mimeType, fmt.w, fmt.h);
+
+        const img = document.createElement('img');
+        img.src = `data:${resized.mimeType};base64,${resized.base64}`;
+        img.title = `${fmt.w}×${fmt.h}`;
+        img.addEventListener('click', () => {
+          const a = document.createElement('a');
+          a.href = img.src;
+          a.download = `creative_${fmt.key}_${completedJobs}.png`;
+          a.click();
+        });
+        formatGroups[fmt.key].container.appendChild(img);
+        formatGroups[fmt.key].images.push({ base64: resized.base64, mimeType: resized.mimeType });
+      } catch (err) {
+        const errDiv = document.createElement('div');
+        errDiv.style.cssText = 'padding:8px;font-size:.8rem;color:var(--accent);';
+        errDiv.textContent = `変換失敗: ${err.message}`;
+        formatGroups[fmt.key].container.appendChild(errDiv);
+      }
+
+      completedJobs++;
+      const pct = Math.round((completedJobs / totalJobs) * 100);
+      $progressBar.style.width = pct + '%';
+      $progressText.textContent = `変換中... (${completedJobs}/${totalJobs})`;
+
+      // Stagger between API calls
+      if (completedJobs < totalJobs) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+  }
+
+  $progressText.textContent = `変換完了！ (${completedJobs}/${totalJobs})`;
+  $startBtn.disabled = false;
+  $startBtn.textContent = '再度変換';
+  showToast('リサイズ変換が完了しました', 'success');
+});
 
 // ===== Edit Modal =====
 let editState = { result: null, index: -1, history: [] };
