@@ -304,6 +304,14 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
   body{flex-direction:column}
   #sidebar{width:100%;min-width:auto;max-height:45vh;border-right:none;border-bottom:1px solid var(--border)}
 }
+/* Sub upload zones (product/logo) */
+.sub-upload-zone{border:1px dashed var(--border);border-radius:var(--radius);padding:10px;text-align:center;cursor:pointer;font-size:.8rem;color:var(--text-secondary);transition:border-color .2s;position:relative}
+.sub-upload-zone:hover{border-color:var(--accent-light)}
+.sub-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.sub-preview{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.sub-preview .thumb{position:relative;width:40px;height:40px}
+.sub-preview .thumb img{width:100%;height:100%;object-fit:cover;border-radius:4px;border:1px solid var(--border)}
+.sub-preview .thumb .remove{position:absolute;top:-4px;right:-4px;background:var(--accent);color:#fff;border:none;border-radius:50%;width:14px;height:14px;font-size:10px;line-height:14px;text-align:center;cursor:pointer;padding:0}
 /* API key toggle */
 .key-row{display:flex;gap:6px}
 .key-row input{flex:1}
@@ -338,6 +346,24 @@ select option{background:var(--bg-input)}
       <input type="file" id="file-input" multiple accept="image/*">
     </div>
     <div id="preview-images"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">商品画像 <span style="font-size:.7rem;color:var(--text-secondary)">(任意)</span></div>
+    <div id="product-upload-zone" class="sub-upload-zone">
+      <div>商品画像をアップロード</div>
+      <input type="file" id="product-file-input" multiple accept="image/*">
+    </div>
+    <div id="product-preview-images" class="sub-preview"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">ロゴ <span style="font-size:.7rem;color:var(--text-secondary)">(任意)</span></div>
+    <div id="logo-upload-zone" class="sub-upload-zone">
+      <div>ロゴ画像をアップロード</div>
+      <input type="file" id="logo-file-input" multiple accept="image/*">
+    </div>
+    <div id="logo-preview-images" class="sub-preview"></div>
   </div>
 
   <div class="section">
@@ -478,6 +504,8 @@ select option{background:var(--bg-input)}
 const State = {
   apiKey: localStorage.getItem('gemini-api-key') || '',
   referenceImages: [], // [{name, base64, mimeType}]
+  productImages: [],   // [{name, base64, mimeType}]
+  logoImages: [],      // [{name, base64, mimeType}]
   prompt: '',
   parallelCount: parseInt(localStorage.getItem('gemini-parallel-count')) || 5,
   aspectRatio: localStorage.getItem('gemini-aspect-ratio') || '1:1',
@@ -603,6 +631,51 @@ function renderPreviews() {
     });
   });
 }
+
+// ===== Product & Logo Upload =====
+function setupSubUpload(zoneId, inputId, previewId, stateKey) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById(previewId);
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    handleSubFiles(e.dataTransfer.files, stateKey, preview);
+  });
+  input.addEventListener('change', () => { handleSubFiles(input.files, stateKey, preview); input.value = ''; });
+}
+
+async function handleSubFiles(files, stateKey, previewEl) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const { base64, mimeType } = await fileToBase64(file);
+    State[stateKey].push({ name: file.name, base64, mimeType });
+  }
+  renderSubPreviews(stateKey, previewEl);
+}
+
+function renderSubPreviews(stateKey, previewEl) {
+  previewEl.innerHTML = '';
+  State[stateKey].forEach((img, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `<img src="data:${img.mimeType};base64,${img.base64}"><button class="remove" data-i="${i}">&times;</button>`;
+    previewEl.appendChild(div);
+  });
+  previewEl.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      State[stateKey].splice(parseInt(btn.dataset.i), 1);
+      renderSubPreviews(stateKey, previewEl);
+    });
+  });
+}
+
+setupSubUpload('product-upload-zone', 'product-file-input', 'product-preview-images', 'productImages');
+setupSubUpload('logo-upload-zone', 'logo-file-input', 'logo-preview-images', 'logoImages');
 
 // ===== Resize image to exact pixel dimensions =====
 function resizeImageToPixels(base64, mimeType, targetW, targetH) {
@@ -793,6 +866,15 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
         promptText += '\n\nまた「悪い例」の画像も添付します。これらとは異なるデザイン・構成・配色にしてください。悪い例のスタイルやレイアウトを避けてください。';
       }
       const variation = styleVariations[index % styleVariations.length];
+      // Build product/logo instruction
+      let assetInstruction = '';
+      if (State.productImages.length > 0) {
+        assetInstruction += `\n6. 【商品画像について】この後に添付する「商品画像」を必ずそのまま使用してください。商品のパッケージや見た目を勝手に変更・創作しないでください。添付された商品画像の見た目を忠実に再現してください。`;
+      }
+      if (State.logoImages.length > 0) {
+        assetInstruction += `\n7. 【ロゴについて】この後に添付する「ロゴ画像」を必ずそのまま使用してください。ロゴのデザイン・色・形を一切変更せず、そのまま配置してください。ロゴを勝手に作り変えないでください。`;
+      }
+
       const systemInstruction = `あなたは広告クリエイティブデザイナーです。以下のルールを守って広告画像を生成してください。
 
 【ルール】
@@ -800,7 +882,7 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
 2. 「Design A」「パターン1」などのラベルや、デザインの説明文・注釈は画像内に入れないでください。
 3. 「デザイン案の比較」として複数案を並べるのではなく、1つの完成されたクリエイティブとして出力してください。
 4. 画像サイズは${State.targetW}×${State.targetH}pxの構図で作成してください。
-5. テキストは読みやすいフォントで出力し、参考画像のコピーを踏襲してください。
+5. テキストは読みやすいフォントで出力し、参考画像のコピーを踏襲してください。${assetInstruction}
 
 【デザインスタイル】
 ${variation}
@@ -821,6 +903,20 @@ ${variation}
     }
     for (const img of refImages) {
       callParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+    }
+    // Product images
+    if (State.productImages.length > 0) {
+      callParts.push({ text: '以下は「商品画像」です。この商品の見た目をそのまま忠実に使用してください。勝手に商品画像を創作しないでください：' });
+      for (const img of State.productImages) {
+        callParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+      }
+    }
+    // Logo images
+    if (State.logoImages.length > 0) {
+      callParts.push({ text: '以下は「ロゴ画像」です。このロゴをデザイン・色・形を一切変更せずにそのまま配置してください。ロゴを勝手に作り変えないでください：' });
+      for (const img of State.logoImages) {
+        callParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+      }
     }
     // Good examples (selected images from previous rounds)
     if (contextImages.length > 0) {
