@@ -259,6 +259,22 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 }
 #selection-toolbar.visible{display:flex}
 #selection-toolbar .count{font-size:.85rem;color:var(--text-secondary);margin-right:auto}
+/* Edit Modal */
+#edit-modal{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;display:flex;align-items:center;justify-content:center}
+#edit-modal-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
+#edit-modal-content{position:relative;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;width:90vw;max-width:1000px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+#edit-modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+#edit-modal-header h3{margin:0;font-size:1.1rem;color:var(--text-primary)}
+#edit-modal-close{background:none;border:none;color:var(--text-secondary);font-size:1.5rem;cursor:pointer;padding:0 4px}
+#edit-modal-close:hover{color:var(--text-primary)}
+#edit-modal-body{display:flex;flex:1;overflow:hidden;min-height:0}
+#edit-image-container{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;background:var(--bg-primary)}
+#edit-image-container img{max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain}
+#edit-controls{width:320px;display:flex;flex-direction:column;padding:16px;border-left:1px solid var(--border);gap:12px}
+#edit-instruction{flex:none;height:140px;resize:vertical;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);padding:10px;font-size:.85rem;font-family:inherit}
+#edit-history{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;min-height:0}
+.edit-history-item{background:var(--bg-input);border-radius:var(--radius);padding:8px 10px;font-size:.8rem;color:var(--text-secondary);border-left:3px solid var(--accent)}
+#edit-buttons{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
 /* Responsive */
 @media(max-width:768px){
   body{flex-direction:column}
@@ -374,6 +390,30 @@ select option{background:var(--bg-input)}
 </div>
 
 <div id="toast-container"></div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" style="display:none">
+  <div id="edit-modal-overlay"></div>
+  <div id="edit-modal-content">
+    <div id="edit-modal-header">
+      <h3>画像を修正</h3>
+      <button id="edit-modal-close">&times;</button>
+    </div>
+    <div id="edit-modal-body">
+      <div id="edit-image-container">
+        <img id="edit-preview" alt="Edit preview">
+      </div>
+      <div id="edit-controls">
+        <textarea id="edit-instruction" placeholder="修正指示を入力...&#10;例:&#10;・見出しのテキストを「○○」に変更&#10;・背景色を青に変更&#10;・右下にロゴを追加&#10;・フォントを大きくして目立たせる"></textarea>
+        <div id="edit-history"></div>
+        <div id="edit-buttons">
+          <button class="btn btn-primary" id="btn-edit-apply">修正を実行</button>
+          <button class="btn btn-secondary" id="btn-edit-accept">この画像を採用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 // ===== State =====
@@ -855,6 +895,9 @@ function renderGrid() {
     if (dlBtn) dlBtn.addEventListener('click', () => downloadSingle(result, i));
     if (refBtn) refBtn.addEventListener('click', () => addAsReference(result));
 
+    const editBtn = card.querySelector('.act-edit');
+    if (editBtn) editBtn.addEventListener('click', () => openEditModal(result, i));
+
     const retryBtn = card.querySelector('.btn-retry');
     if (retryBtn) retryBtn.addEventListener('click', () => retryGeneration(round, result, i, card));
   });
@@ -880,6 +923,7 @@ function buildCardHTML(result, index) {
     actions = `<div class="card-actions">
       <button class="act-select${result.selection === 'selected' ? ' on' : ''}">✓ 採用</button>
       <button class="act-reject${result.selection === 'rejected' ? ' on' : ''}">✗ 不採用</button>
+      <button class="act-edit" title="修正">✎</button>
       <button class="act-dl">↓</button>
       <button class="act-ref" title="参考画像に追加">📎</button>
     </div>`;
@@ -903,6 +947,8 @@ function toggleSelection(result, type, card) {
   if (rejectBtn) rejectBtn.addEventListener('click', () => toggleSelection(result, 'rejected', card));
   if (dlBtn) dlBtn.addEventListener('click', () => downloadSingle(result, index));
   if (refBtn) refBtn.addEventListener('click', () => addAsReference(result));
+  const editBtn2 = card.querySelector('.act-edit');
+  if (editBtn2) editBtn2.addEventListener('click', () => openEditModal(result, index));
 
   updateSelectionCount();
   updateButtons();
@@ -1043,6 +1089,86 @@ function addAsReference(result) {
   showToast('参考画像に追加しました', 'success');
 }
 
+// ===== Edit Modal =====
+let editState = { result: null, index: -1, history: [] };
+
+const $editModal = document.getElementById('edit-modal');
+const $editPreview = document.getElementById('edit-preview');
+const $editInstruction = document.getElementById('edit-instruction');
+const $editHistory = document.getElementById('edit-history');
+
+function openEditModal(result, index) {
+  editState = { result, index, history: [] };
+  $editPreview.src = `data:${result.mimeType};base64,${result.imageBase64}`;
+  $editInstruction.value = '';
+  $editHistory.innerHTML = '';
+  $editModal.style.display = 'flex';
+}
+
+function closeEditModal() {
+  $editModal.style.display = 'none';
+  editState = { result: null, index: -1, history: [] };
+}
+
+document.getElementById('edit-modal-close').addEventListener('click', closeEditModal);
+document.getElementById('edit-modal-overlay').addEventListener('click', closeEditModal);
+
+document.getElementById('btn-edit-apply').addEventListener('click', async () => {
+  const instruction = $editInstruction.value.trim();
+  if (!instruction) { showToast('修正指示を入力してください', 'error'); return; }
+  if (!editState.result) return;
+
+  const btn = document.getElementById('btn-edit-apply');
+  btn.disabled = true;
+  btn.textContent = '修正中...';
+
+  // Add to history
+  const histItem = document.createElement('div');
+  histItem.className = 'edit-history-item';
+  histItem.textContent = instruction;
+  $editHistory.appendChild(histItem);
+  $editHistory.scrollTop = $editHistory.scrollHeight;
+
+  const parts = [
+    { text: `以下の画像を修正してください。修正指示以外の部分はできるだけ変更しないでください。\n\n【修正指示】\n${instruction}\n\n画像サイズは${State.targetW}×${State.targetH}pxを想定した構図を維持してください。` },
+    { inlineData: { mimeType: editState.result.mimeType, data: editState.result.imageBase64 } }
+  ];
+
+  try {
+    const data = await callGeminiAPIWithRetry(parts, 3);
+    const resized = await resizeImageToPixels(
+      data.imageBase64, data.mimeType, State.targetW, State.targetH
+    );
+
+    // Update the preview
+    $editPreview.src = `data:${resized.mimeType};base64,${resized.base64}`;
+
+    // Update the result in state
+    editState.result.imageBase64 = resized.base64;
+    editState.result.mimeType = resized.mimeType;
+
+    editState.history.push(instruction);
+    $editInstruction.value = '';
+    showToast('修正が完了しました', 'success');
+  } catch (err) {
+    showToast('修正に失敗: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '修正を実行';
+  }
+});
+
+document.getElementById('btn-edit-accept').addEventListener('click', () => {
+  if (!editState.result) return;
+  editState.result.selection = 'selected';
+  renderGrid();
+  updateSelectionCount();
+  updateButtons();
+  closeEditModal();
+  showToast('採用しました', 'success');
+});
+
+// ===== Retry =====
 async function retryGeneration(round, result, index, card) {
   result.status = 'loading';
   result.errorMessage = null;
