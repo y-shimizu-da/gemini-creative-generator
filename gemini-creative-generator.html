@@ -1120,7 +1120,14 @@ document.getElementById('btn-edit-apply').addEventListener('click', async () => 
 
   const btn = document.getElementById('btn-edit-apply');
   btn.disabled = true;
-  btn.textContent = '修正中...';
+
+  // Show elapsed time
+  let elapsed = 0;
+  const timer = setInterval(() => {
+    elapsed++;
+    btn.textContent = `修正中... (${elapsed}秒)`;
+  }, 1000);
+  btn.textContent = '修正中... (0秒)';
 
   // Add to history
   const histItem = document.createElement('div');
@@ -1135,7 +1142,7 @@ document.getElementById('btn-edit-apply').addEventListener('click', async () => 
   ];
 
   try {
-    const data = await callGeminiAPIWithRetry(parts, 3);
+    const data = await callGeminiAPIWithRetry(parts, 2);
     const resized = await resizeImageToPixels(
       data.imageBase64, data.mimeType, State.targetW, State.targetH
     );
@@ -1153,6 +1160,7 @@ document.getElementById('btn-edit-apply').addEventListener('click', async () => 
   } catch (err) {
     showToast('修正に失敗: ' + err.message, 'error');
   } finally {
+    clearInterval(timer);
     btn.disabled = false;
     btn.textContent = '修正を実行';
   }
