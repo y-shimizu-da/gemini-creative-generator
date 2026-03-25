@@ -367,6 +367,7 @@ select option{background:var(--bg-input)}
   </div>
   <div id="selection-toolbar">
     <span class="count" id="sel-count">0件選択中</span>
+    <button class="btn btn-outline" id="btn-retry-all" style="padding:6px 12px;font-size:.8rem;border-color:var(--accent);color:var(--accent)">エラーを全て再試行</button>
     <button class="btn btn-outline" id="btn-select-all" style="padding:6px 12px;font-size:.8rem">全選択</button>
     <button class="btn btn-outline" id="btn-deselect-all" style="padding:6px 12px;font-size:.8rem">全解除</button>
   </div>
@@ -745,9 +746,9 @@ ${variation}
 
   const promises = round.results.map((result, i) => {
     const callParts = buildPartsForCall(i);
-    // Stagger starts to avoid rate limits (800ms between each)
-    return new Promise(resolve => setTimeout(resolve, i * 800))
-      .then(() => callGeminiAPIWithRetry(callParts, 2))
+    // Stagger starts to avoid rate limits (1.5s between each)
+    return new Promise(resolve => setTimeout(resolve, i * 1500))
+      .then(() => callGeminiAPIWithRetry(callParts, 5))
       .then(async data => {
         // Resize to exact pixel dimensions
         const resized = await resizeImageToPixels(
@@ -788,9 +789,14 @@ async function callGeminiAPIWithRetry(parts, maxRetries) {
       const isRetryable = err.message.includes('429')
         || err.message.includes('RESOURCE_EXHAUSTED')
         || err.message.includes('high demand')
+        || err.message.includes('overloaded')
+        || err.message.includes('503')
         || err.message.includes('画像が生成されませんでした');
       if (attempt < maxRetries && isRetryable) {
-        await new Promise(r => setTimeout(r, (attempt + 1) * 4000));
+        // Exponential backoff: 3s, 6s, 12s, 24s, 48s + random jitter
+        const baseWait = 3000 * Math.pow(2, attempt);
+        const jitter = Math.random() * 2000;
+        await new Promise(r => setTimeout(r, baseWait + jitter));
         continue;
       }
       throw err;
@@ -973,6 +979,52 @@ $btnDeselectAll.addEventListener('click', () => {
   updateButtons();
 });
 
+document.getElementById('btn-retry-all').addEventListener('click', async () => {
+  const round = State.rounds[State.currentRound];
+  if (!round) return;
+  const errorResults = round.results
+    .map((r, i) => ({ result: r, index: i }))
+    .filter(({ result }) => result.status === 'error');
+  if (errorResults.length === 0) { showToast('エラーはありません', 'info'); return; }
+  showToast(`${errorResults.length}件を再試行中...`, 'info');
+
+  // Reset all error cards to loading
+  errorResults.forEach(({ result }) => { result.status = 'loading'; result.errorMessage = null; });
+  renderGrid();
+
+  // Stagger retry calls
+  for (let idx = 0; idx < errorResults.length; idx++) {
+    const { result, index } = errorResults[idx];
+    if (idx > 0) await new Promise(r => setTimeout(r, 1500));
+
+    const parts = [];
+    if (State.prompt.trim()) {
+      parts.push({ text: State.prompt.trim() });
+    }
+    for (const img of State.referenceImages) {
+      parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+    }
+
+    try {
+      const data = await callGeminiAPIWithRetry(parts, 5);
+      const resized = await resizeImageToPixels(
+        data.imageBase64, data.mimeType, State.targetW, State.targetH
+      );
+      result.status = 'success';
+      result.imageBase64 = resized.base64;
+      result.mimeType = resized.mimeType;
+      result.text = data.text;
+    } catch (err) {
+      result.status = 'error';
+      result.errorMessage = err.message;
+    }
+    renderGrid();
+  }
+  showToast('再試行が完了しました', 'success');
+  updateSelectionCount();
+  updateButtons();
+});
+
 function downloadSingle(result, index) {
   const ext = result.mimeType.split('/')[1] || 'png';
   const a = document.createElement('a');
@@ -1007,7 +1059,7 @@ async function retryGeneration(round, result, index, card) {
   }
 
   try {
-    const data = await callGeminiAPIWithRetry(parts, 2);
+    const data = await callGeminiAPIWithRetry(parts, 5);
     const resized = await resizeImageToPixels(
       data.imageBase64, data.mimeType, State.targetW, State.targetH
     );
