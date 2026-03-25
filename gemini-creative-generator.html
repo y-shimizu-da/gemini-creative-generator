@@ -265,6 +265,29 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 .modal-header h3{margin:0;font-size:1.1rem;color:var(--text-primary)}
 .modal-close{background:none;border:none;color:var(--text-secondary);font-size:1.5rem;cursor:pointer;padding:0 4px}
 .modal-close:hover{color:var(--text-primary)}
+/* Resize Results View (inline) */
+#resize-view{padding:16px;overflow-y:auto;flex:1}
+#resize-view-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px}
+#resize-progress-info{flex:1}
+#resize-status-text{font-size:.9rem;color:var(--text-primary);margin-bottom:6px;display:block}
+#resize-progress-bar-bg{width:100%;height:6px;background:var(--bg-input);border-radius:3px;overflow:hidden}
+#resize-progress-bar{height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .3s}
+#resize-results-grid{display:flex;flex-direction:column;gap:24px}
+.resize-source-row{background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.resize-source-header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg-input)}
+.resize-source-header img{height:60px;border-radius:6px;object-fit:contain}
+.resize-source-header .source-label{font-size:.85rem;color:var(--text-primary);font-weight:600}
+.resize-source-header .source-sublabel{font-size:.75rem;color:var(--text-secondary)}
+.resize-formats-row{display:flex;flex-wrap:wrap;gap:12px;padding:12px 16px}
+.resize-format-col{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:140px}
+.resize-format-col .fmt-label{font-size:.75rem;color:var(--text-secondary);text-align:center}
+.resize-format-col .fmt-image-wrap{position:relative;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:6px;min-width:120px;min-height:80px;display:flex;align-items:center;justify-content:center}
+.resize-format-col .fmt-image-wrap img{max-width:160px;max-height:140px;border-radius:4px;object-fit:contain;cursor:pointer}
+.resize-format-col .fmt-image-wrap img:hover{opacity:.85}
+.resize-format-col .fmt-image-wrap .fmt-skeleton{width:120px;height:80px;background:linear-gradient(90deg,var(--bg-input) 25%,var(--border) 50%,var(--bg-input) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px}
+.resize-format-col .fmt-image-wrap .fmt-error{font-size:.7rem;color:var(--accent);text-align:center;padding:8px}
+.resize-format-col .fmt-dl-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-secondary);font-size:.7rem;padding:2px 8px;cursor:pointer}
+.resize-format-col .fmt-dl-btn:hover{border-color:var(--accent-light);color:var(--text-primary)}
 /* Resize Modal */
 #resize-modal{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;display:flex;align-items:center;justify-content:center}
 #resize-modal-content{position:relative;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;width:90vw;max-width:640px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
@@ -432,6 +455,17 @@ select option{background:var(--bg-input)}
     </div>
     <div id="results-grid" style="display:none"></div>
   </div>
+  <!-- Resize Results View -->
+  <div id="resize-view" style="display:none">
+    <div id="resize-view-header">
+      <div id="resize-progress-info">
+        <span id="resize-status-text">変換中...</span>
+        <div id="resize-progress-bar-bg"><div id="resize-progress-bar"></div></div>
+      </div>
+      <button class="btn btn-outline" id="btn-resize-dl-all" style="padding:6px 12px;font-size:.8rem">全てDL</button>
+    </div>
+    <div id="resize-results-grid"></div>
+  </div>
   <div id="selection-toolbar">
     <span class="count" id="sel-count">0件選択中</span>
     <button class="btn btn-outline" id="btn-retry-all" style="padding:6px 12px;font-size:.8rem;border-color:var(--accent);color:var(--accent)">エラーを全て再試行</button>
@@ -442,18 +476,17 @@ select option{background:var(--bg-input)}
 
 <div id="toast-container"></div>
 
-<!-- Resize Modal -->
+<!-- Resize Format Picker Modal (small) -->
 <div id="resize-modal" style="display:none">
   <div class="modal-overlay" data-close="resize"></div>
   <div id="resize-modal-content">
     <div class="modal-header">
-      <h3>採用画像をリサイズ変換</h3>
+      <h3>リサイズ変換 - フォーマット選択</h3>
       <button class="modal-close" data-close="resize">&times;</button>
     </div>
     <div id="resize-body">
       <div id="resize-description">
-        採用画像を選択したフォーマットに変換します。<br>
-        Gemini AIがレイアウトを最適化して再構成します。
+        採用画像をGemini AIがレイアウトを最適化して再構成します。
       </div>
       <div id="resize-formats">
         <div class="section-label" style="margin-bottom:8px">変換先フォーマット（複数選択可）</div>
@@ -466,11 +499,6 @@ select option{background:var(--bg-input)}
       </div>
       <div id="resize-source-info"></div>
       <button class="btn btn-primary" id="btn-resize-start" style="width:100%;margin-top:12px">変換開始</button>
-      <div id="resize-progress" style="display:none">
-        <div id="resize-progress-text">変換中...</div>
-        <div id="resize-progress-bar-bg"><div id="resize-progress-bar"></div></div>
-      </div>
-      <div id="resize-results"></div>
     </div>
   </div>
 </div>
@@ -511,7 +539,9 @@ const State = {
   aspectRatio: localStorage.getItem('gemini-aspect-ratio') || '1:1',
   rounds: [],
   currentRound: -1,
+  currentView: 'round', // 'round' or 'resize'
   generating: false,
+  resizeResults: [], // [{sourceImage, sourceIndex, formats: [{key, w, h, label, status, imageBase64, mimeType, errorMessage}]}]
 };
 
 // ===== DOM refs =====
@@ -808,6 +838,7 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
   }
 
   State.generating = true;
+  State.abortGeneration = false;
   updateButtons();
 
   const roundIndex = State.rounds.length;
@@ -939,38 +970,71 @@ ${variation}
 
   let completed = 0;
 
-  const promises = round.results.map((result, i) => {
-    const callParts = buildPartsForCall(i);
-    // Stagger starts to avoid rate limits (1.5s between each)
-    return new Promise(resolve => setTimeout(resolve, i * 1500))
-      .then(() => callGeminiAPIWithRetry(callParts, 5))
-      .then(async data => {
-        // Resize to exact pixel dimensions
-        const resized = await resizeImageToPixels(
-          data.imageBase64, data.mimeType, State.targetW, State.targetH
-        );
-        result.status = 'success';
-        result.imageBase64 = resized.base64;
-        result.mimeType = resized.mimeType;
-        result.text = data.text;
-      })
-      .catch(err => {
-        result.status = 'error';
-        result.errorMessage = err.message;
-      })
-      .finally(() => {
-        completed++;
-        setStatus('active', `生成中... (${completed}/${State.parallelCount} 完了)`);
-        if (State.currentRound === roundIndex) renderGrid();
-      });
-  });
+  // Launch calls in batches of 3 with stagger, checking abort between each
+  const BATCH_SIZE = 3;
+  const STAGGER_MS = 1500;
 
-  await Promise.allSettled(promises);
+  for (let batchStart = 0; batchStart < round.results.length; batchStart += BATCH_SIZE) {
+    if (State.abortGeneration) break;
+
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, round.results.length);
+    const batchPromises = [];
+
+    for (let i = batchStart; i < batchEnd; i++) {
+      const result = round.results[i];
+      const callParts = buildPartsForCall(i);
+      const staggerDelay = (i - batchStart) * STAGGER_MS;
+
+      batchPromises.push(
+        new Promise(resolve => setTimeout(resolve, staggerDelay))
+          .then(() => {
+            if (State.abortGeneration) { result.status = 'cancelled'; result.errorMessage = '中断されました'; return; }
+            return callGeminiAPIWithRetry(callParts, 5);
+          })
+          .then(async data => {
+            if (!data || State.abortGeneration) return;
+            const resized = await resizeImageToPixels(
+              data.imageBase64, data.mimeType, State.targetW, State.targetH
+            );
+            result.status = 'success';
+            result.imageBase64 = resized.base64;
+            result.mimeType = resized.mimeType;
+            result.text = data.text;
+          })
+          .catch(err => {
+            if (result.status !== 'cancelled') {
+              result.status = 'error';
+              result.errorMessage = err.message;
+            }
+          })
+          .finally(() => {
+            completed++;
+            setStatus('active', `生成中... (${completed}/${State.parallelCount} 完了)`);
+            if (State.currentRound === roundIndex) renderGrid();
+          })
+      );
+    }
+
+    await Promise.allSettled(batchPromises);
+  }
+
+  // Mark remaining loading items as cancelled
+  if (State.abortGeneration) {
+    round.results.forEach(r => {
+      if (r.status === 'loading') { r.status = 'cancelled'; r.errorMessage = '中断されました'; }
+    });
+    renderGrid();
+  }
 
   State.generating = false;
+  State.abortGeneration = false;
   const successCount = round.results.filter(r => r.status === 'success').length;
   const errorCount = round.results.filter(r => r.status === 'error').length;
-  setStatus('idle', `Round ${round.id}: ${successCount}件成功${errorCount > 0 ? ` / ${errorCount}件エラー` : ''}`);
+  const cancelCount = round.results.filter(r => r.status === 'cancelled').length;
+  let statusMsg = `Round ${round.id}: ${successCount}件成功`;
+  if (errorCount > 0) statusMsg += ` / ${errorCount}件エラー`;
+  if (cancelCount > 0) statusMsg += ` / ${cancelCount}件中断`;
+  setStatus('idle', statusMsg);
   updateButtons();
   updateSelectionCount();
 }
@@ -1002,19 +1066,46 @@ async function callGeminiAPIWithRetry(parts, maxRetries) {
 // ===== Round Tabs =====
 function renderRoundTabs() {
   $roundTabs.innerHTML = '';
-  if (State.rounds.length === 0) return;
+  if (State.rounds.length === 0 && State.resizeResults.length === 0) return;
   State.rounds.forEach((round, i) => {
     const btn = document.createElement('button');
-    btn.className = `round-tab${i === State.currentRound ? ' active' : ''}`;
+    btn.className = `round-tab${State.currentView === 'round' && i === State.currentRound ? ' active' : ''}`;
     btn.textContent = `Round ${round.id}`;
     btn.addEventListener('click', () => {
+      State.currentView = 'round';
       State.currentRound = i;
       renderRoundTabs();
-      renderGrid();
+      switchView();
       updateSelectionCount();
     });
     $roundTabs.appendChild(btn);
   });
+  // Resize tab
+  if (State.resizeResults.length > 0) {
+    const btn = document.createElement('button');
+    btn.className = `round-tab${State.currentView === 'resize' ? ' active' : ''}`;
+    btn.style.cssText = 'border-color:#00b894;color:#00b894;';
+    btn.textContent = `リサイズ結果 (${State.resizeResults.length})`;
+    btn.addEventListener('click', () => {
+      State.currentView = 'resize';
+      renderRoundTabs();
+      switchView();
+    });
+    $roundTabs.appendChild(btn);
+  }
+}
+
+function switchView() {
+  const $resizeView = document.getElementById('resize-view');
+  if (State.currentView === 'resize') {
+    $resultsGrid.style.display = 'none';
+    $noRounds.style.display = 'none';
+    $resizeView.style.display = 'block';
+    renderResizeView();
+  } else {
+    $resizeView.style.display = 'none';
+    renderGrid();
+  }
 }
 
 // ===== Grid Rendering =====
@@ -1065,6 +1156,8 @@ function buildCardHTML(result, index) {
 
   if (result.status === 'loading') {
     imageArea = '<div class="skeleton"></div>';
+  } else if (result.status === 'cancelled') {
+    imageArea = `<div class="card-error"><div class="err-icon">⏹</div><div>中断されました</div><button class="btn-retry">生成する</button></div>`;
   } else if (result.status === 'error') {
     imageArea = `<div class="card-error"><div class="err-icon">⚠</div><div>${escapeHtml(result.errorMessage)}</div><button class="btn-retry">再試行</button></div>`;
   } else {
@@ -1123,17 +1216,38 @@ function setStatus(mode, text) {
 }
 
 function updateButtons() {
-  $btnGenerate.disabled = State.generating;
-  $btnGenerate.textContent = State.generating ? '生成中...' : '生成開始';
+  if (State.generating && !State.abortGeneration) {
+    $btnGenerate.disabled = false;
+    $btnGenerate.textContent = '⏹ 中断する';
+    $btnGenerate.style.background = 'var(--accent)';
+  } else if (State.generating && State.abortGeneration) {
+    $btnGenerate.disabled = true;
+    $btnGenerate.textContent = '中断中...';
+    $btnGenerate.style.background = '';
+  } else {
+    $btnGenerate.disabled = false;
+    $btnGenerate.textContent = '生成開始';
+    $btnGenerate.style.background = '';
+  }
 
   const hasSelected = State.rounds.some(r => r.results.some(res => res.selection === 'selected'));
-  $btnContinue.disabled = State.generating || !hasSelected;
+  $btnContinue.disabled = !hasSelected;
   $btnDownload.disabled = !hasSelected;
   $btnResize.disabled = !hasSelected;
 }
 
 // ===== Actions =====
-$btnGenerate.addEventListener('click', () => runGeneration());
+$btnGenerate.addEventListener('click', () => {
+  if (State.generating) {
+    // Stop generation
+    State.abortGeneration = true;
+    $btnGenerate.textContent = '中断中...';
+    $btnGenerate.disabled = true;
+    showToast('生成を中断しています...', 'info');
+  } else {
+    runGeneration();
+  }
+});
 
 $btnContinue.addEventListener('click', () => {
   const selectedImages = [];
@@ -1289,49 +1403,38 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
     });
   });
 
+  // Close modal and switch to resize view
+  closeResizeModal();
+
+  // Build resize result structure
+  State.resizeResults = selected.map((r, idx) => ({
+    sourceImage: r.imageBase64,
+    sourceMimeType: r.mimeType,
+    sourceIndex: idx,
+    formats: checkedFormats.map(fmt => ({
+      key: fmt.key, w: fmt.w, h: fmt.h, label: fmt.label,
+      status: 'loading', imageBase64: null, mimeType: null, errorMessage: null
+    }))
+  }));
+
+  State.currentView = 'resize';
+  renderRoundTabs();
+  switchView();
+
   const totalJobs = selected.length * checkedFormats.length;
   let completedJobs = 0;
 
-  const $progress = document.getElementById('resize-progress');
   const $progressBar = document.getElementById('resize-progress-bar');
-  const $progressText = document.getElementById('resize-progress-text');
-  const $results = document.getElementById('resize-results');
-  const $startBtn = document.getElementById('btn-resize-start');
-
-  $startBtn.disabled = true;
-  $progress.style.display = 'block';
-  $results.innerHTML = '';
+  const $statusText = document.getElementById('resize-status-text');
   $progressBar.style.width = '0%';
-  $progressText.textContent = `変換中... (0/${totalJobs})`;
+  $statusText.textContent = `変換中... (0/${totalJobs})`;
 
-  // Create result groups per format
-  const formatGroups = {};
-  checkedFormats.forEach(fmt => {
-    const group = document.createElement('div');
-    group.className = 'resize-result-group';
-    group.innerHTML = `<div class="resize-result-header">
-      <span>${fmt.w}×${fmt.h} (${fmt.label})</span>
-      <button class="btn btn-outline" style="padding:4px 10px;font-size:.75rem" data-dl-format="${fmt.key}">全てDL</button>
-    </div><div class="resize-result-images" id="resize-imgs-${fmt.key}"></div>`;
-    $results.appendChild(group);
-    formatGroups[fmt.key] = { images: [], container: group.querySelector('.resize-result-images') };
+  // Process each source image × format
+  for (let si = 0; si < State.resizeResults.length; si++) {
+    const srcEntry = State.resizeResults[si];
+    for (let fi = 0; fi < srcEntry.formats.length; fi++) {
+      const fmt = srcEntry.formats[fi];
 
-    group.querySelector(`[data-dl-format="${fmt.key}"]`).addEventListener('click', () => {
-      formatGroups[fmt.key].images.forEach((img, idx) => {
-        setTimeout(() => {
-          const a = document.createElement('a');
-          a.href = `data:${img.mimeType};base64,${img.base64}`;
-          a.download = `creative_${fmt.key}_${idx + 1}.png`;
-          a.click();
-        }, idx * 200);
-      });
-    });
-  });
-
-  // Process each image × format combination sequentially with stagger
-  for (const result of selected) {
-    for (const fmt of checkedFormats) {
-      // Determine aspect ratio string for API
       const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
       const g = gcd(fmt.w, fmt.h);
       const ratioW = fmt.w / g;
@@ -1346,47 +1449,119 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
 ・テキストの内容は一字一句変えないでください。
 ・余白の追加や要素の配置変更で、新しいサイズに自然にフィットさせてください。
 ・画像は1枚だけ出力してください。` },
-        { inlineData: { mimeType: result.mimeType, data: result.imageBase64 } }
+        { inlineData: { mimeType: srcEntry.sourceMimeType, data: srcEntry.sourceImage } }
       ];
 
       try {
         const data = await callGeminiAPIWithRetry(parts, 2);
         const resized = await resizeImageToPixels(data.imageBase64, data.mimeType, fmt.w, fmt.h);
-
-        const img = document.createElement('img');
-        img.src = `data:${resized.mimeType};base64,${resized.base64}`;
-        img.title = `${fmt.w}×${fmt.h}`;
-        img.addEventListener('click', () => {
-          const a = document.createElement('a');
-          a.href = img.src;
-          a.download = `creative_${fmt.key}_${completedJobs}.png`;
-          a.click();
-        });
-        formatGroups[fmt.key].container.appendChild(img);
-        formatGroups[fmt.key].images.push({ base64: resized.base64, mimeType: resized.mimeType });
+        fmt.status = 'success';
+        fmt.imageBase64 = resized.base64;
+        fmt.mimeType = resized.mimeType;
       } catch (err) {
-        const errDiv = document.createElement('div');
-        errDiv.style.cssText = 'padding:8px;font-size:.8rem;color:var(--accent);';
-        errDiv.textContent = `変換失敗: ${err.message}`;
-        formatGroups[fmt.key].container.appendChild(errDiv);
+        fmt.status = 'error';
+        fmt.errorMessage = err.message;
       }
 
       completedJobs++;
       const pct = Math.round((completedJobs / totalJobs) * 100);
       $progressBar.style.width = pct + '%';
-      $progressText.textContent = `変換中... (${completedJobs}/${totalJobs})`;
+      $statusText.textContent = `変換中... (${completedJobs}/${totalJobs})`;
+      if (State.currentView === 'resize') renderResizeView();
 
-      // Stagger between API calls
       if (completedJobs < totalJobs) {
         await new Promise(r => setTimeout(r, 1500));
       }
     }
   }
 
-  $progressText.textContent = `変換完了！ (${completedJobs}/${totalJobs})`;
-  $startBtn.disabled = false;
-  $startBtn.textContent = '再度変換';
+  $statusText.textContent = `変換完了！ (${completedJobs}/${totalJobs})`;
+  renderRoundTabs();
   showToast('リサイズ変換が完了しました', 'success');
+});
+
+// Render resize results view
+function renderResizeView() {
+  const $grid = document.getElementById('resize-results-grid');
+  $grid.innerHTML = '';
+
+  State.resizeResults.forEach((srcEntry, si) => {
+    const row = document.createElement('div');
+    row.className = 'resize-source-row';
+
+    // Header with source thumbnail
+    const header = document.createElement('div');
+    header.className = 'resize-source-header';
+    header.innerHTML = `
+      <img src="data:${srcEntry.sourceMimeType};base64,${srcEntry.sourceImage}">
+      <div>
+        <div class="source-label">元画像 #${si + 1}</div>
+        <div class="source-sublabel">${srcEntry.formats.filter(f=>f.status==='success').length}/${srcEntry.formats.length} 完了</div>
+      </div>
+    `;
+    row.appendChild(header);
+
+    // Format columns
+    const fmtRow = document.createElement('div');
+    fmtRow.className = 'resize-formats-row';
+
+    srcEntry.formats.forEach((fmt, fi) => {
+      const col = document.createElement('div');
+      col.className = 'resize-format-col';
+
+      let imageContent = '';
+      if (fmt.status === 'loading') {
+        imageContent = '<div class="fmt-skeleton"></div>';
+      } else if (fmt.status === 'error') {
+        imageContent = `<div class="fmt-error">失敗<br><span style="font-size:.65rem">${escapeHtml(fmt.errorMessage || '')}</span></div>`;
+      } else {
+        imageContent = `<img src="data:${fmt.mimeType};base64,${fmt.imageBase64}" title="クリックでDL" data-si="${si}" data-fi="${fi}">`;
+      }
+
+      col.innerHTML = `
+        <div class="fmt-label">${fmt.w}×${fmt.h}<br>${fmt.label}</div>
+        <div class="fmt-image-wrap">${imageContent}</div>
+        ${fmt.status === 'success' ? `<button class="fmt-dl-btn" data-si="${si}" data-fi="${fi}">↓ DL</button>` : ''}
+      `;
+      fmtRow.appendChild(col);
+    });
+
+    row.appendChild(fmtRow);
+    $grid.appendChild(row);
+  });
+
+  // Bind DL clicks
+  $grid.querySelectorAll('.fmt-dl-btn, .fmt-image-wrap img').forEach(el => {
+    el.addEventListener('click', () => {
+      const si = parseInt(el.dataset.si);
+      const fi = parseInt(el.dataset.fi);
+      const fmt = State.resizeResults[si].formats[fi];
+      if (fmt.status !== 'success') return;
+      const a = document.createElement('a');
+      a.href = `data:${fmt.mimeType};base64,${fmt.imageBase64}`;
+      a.download = `creative_${si+1}_${fmt.key}.png`;
+      a.click();
+    });
+  });
+}
+
+// DL all resize results
+document.getElementById('btn-resize-dl-all').addEventListener('click', () => {
+  let count = 0;
+  State.resizeResults.forEach((src, si) => {
+    src.formats.forEach((fmt, fi) => {
+      if (fmt.status === 'success') {
+        setTimeout(() => {
+          const a = document.createElement('a');
+          a.href = `data:${fmt.mimeType};base64,${fmt.imageBase64}`;
+          a.download = `creative_${si+1}_${fmt.key}.png`;
+          a.click();
+        }, count * 200);
+        count++;
+      }
+    });
+  });
+  if (count > 0) showToast(`${count}件の画像をダウンロード中...`, 'success');
 });
 
 // ===== Edit Modal =====
