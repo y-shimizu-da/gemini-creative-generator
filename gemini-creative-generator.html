@@ -946,21 +946,54 @@ $fileInput.addEventListener('change', () => { handleFiles($fileInput.files); $fi
 async function handleFiles(files) {
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
-    const { base64, mimeType } = await fileToBase64(file);
-    State.referenceImages.push({ name: file.name, base64, mimeType });
+    try {
+      const { base64, mimeType } = await fileToBase64(file);
+      State.referenceImages.push({ name: file.name, base64, mimeType });
+    } catch (e) {
+      showToast(`${file.name} の読み込みに失敗しました`, 'error');
+    }
   }
   renderPreviews();
 }
 
 function fileToBase64(file) {
-  return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
+  return new Promise((resolve, reject) => {
+    // Compress large images to prevent memory issues
+    const MAX_DIMENSION = 1536;
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      // Resize if too large
+      if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+        const scale = MAX_DIMENSION / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      const quality = mimeType === 'image/jpeg' ? 0.85 : undefined;
+      const dataUrl = canvas.toDataURL(mimeType, quality);
       const base64 = dataUrl.split(',')[1];
-      resolve({ base64, mimeType: file.type });
+      resolve({ base64, mimeType });
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      // Fallback to FileReader
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve({ base64, mimeType: file.type });
+      };
+      reader.onerror = () => reject(new Error('ファイル読み込みに失敗: ' + file.name));
+      reader.readAsDataURL(file);
+    };
+    img.src = url;
   });
 }
 
@@ -1000,8 +1033,12 @@ function setupSubUpload(zoneId, inputId, previewId, stateKey) {
 async function handleSubFiles(files, stateKey, previewEl) {
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
-    const { base64, mimeType } = await fileToBase64(file);
-    State[stateKey].push({ name: file.name, base64, mimeType });
+    try {
+      const { base64, mimeType } = await fileToBase64(file);
+      State[stateKey].push({ name: file.name, base64, mimeType });
+    } catch (e) {
+      showToast(`${file.name} の読み込みに失敗しました`, 'error');
+    }
   }
   renderSubPreviews(stateKey, previewEl);
 }
