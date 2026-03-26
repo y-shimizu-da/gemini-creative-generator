@@ -1704,8 +1704,6 @@ function openResizeModal() {
   if (selected.length === 0) { showToast('採用画像がありません', 'error'); return; }
 
   document.getElementById('resize-source-info').textContent = `採用画像: ${selected.length}枚`;
-  document.getElementById('resize-results').innerHTML = '';
-  document.getElementById('resize-progress').style.display = 'none';
   document.getElementById('btn-resize-start').disabled = false;
   document.getElementById('btn-resize-start').textContent = '変換開始';
   // Uncheck all
