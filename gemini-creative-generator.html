@@ -335,6 +335,26 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 .sub-preview .thumb{position:relative;width:40px;height:40px}
 .sub-preview .thumb img{width:100%;height:100%;object-fit:cover;border-radius:4px;border:1px solid var(--border)}
 .sub-preview .thumb .remove{position:absolute;top:-4px;right:-4px;background:var(--accent);color:#fff;border:none;border-radius:50%;width:14px;height:14px;font-size:10px;line-height:14px;text-align:center;cursor:pointer;padding:0}
+/* Admin Dashboard */
+#admin-dashboard{display:none;flex-direction:column;width:100%;height:100vh;padding:20px;overflow-y:auto;background:var(--bg-primary)}
+#admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+#admin-header h1{font-size:1.4rem;color:var(--text-primary)}
+#admin-controls{display:flex;gap:8px}
+#admin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center}
+.stat-label{font-size:.8rem;color:var(--text-secondary);margin-bottom:8px}
+.stat-value{font-size:1.8rem;font-weight:700;color:var(--accent)}
+#admin-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:4px}
+.admin-tab{background:none;border:none;color:var(--text-secondary);padding:8px 16px;cursor:pointer;font-size:.9rem;border-radius:8px 8px 0 0;transition:all .2s}
+.admin-tab.active{color:var(--text-primary);background:var(--bg-secondary);border-bottom:2px solid var(--accent)}
+.admin-tab:hover{color:var(--text-primary)}
+.admin-tab-content{display:none}
+.admin-tab-content.active{display:block}
+#admin-content table{width:100%;border-collapse:collapse;font-size:.85rem}
+#admin-content th{text-align:left;padding:10px 12px;background:var(--bg-secondary);color:var(--text-secondary);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap}
+#admin-content td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text-primary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#admin-content tr:hover td{background:rgba(255,255,255,.03)}
+@media(max-width:900px){#admin-stats{grid-template-columns:repeat(2,1fr)}}
 /* API key toggle */
 .key-row{display:flex;gap:6px}
 .key-row input{flex:1}
@@ -354,11 +374,21 @@ select option{background:var(--bg-input)}
   <h1><span>⚡</span> CR一括生成ツール</h1>
 
   <div class="section">
+    <div class="section-label">ユーザー名</div>
+    <input type="text" id="user-name" placeholder="あなたの名前（ログ記録用）" style="width:100%;padding:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:.85rem">
+  </div>
+
+  <div class="section">
     <div class="section-label">APIキー</div>
     <div class="key-row">
       <input type="password" id="api-key" placeholder="Gemini APIキーを入力">
       <button id="key-toggle" title="表示/非表示">👁</button>
     </div>
+  </div>
+
+  <div class="section" id="webhook-section" style="display:none">
+    <div class="section-label">Webhook URL <span style="font-size:.7rem;color:var(--text-secondary)">(管理者設定)</span></div>
+    <input type="text" id="webhook-url" placeholder="Google Apps Script URL" style="width:100%;padding:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:.85rem">
   </div>
 
   <div class="section">
@@ -476,6 +506,88 @@ select option{background:var(--bg-input)}
 
 <div id="toast-container"></div>
 
+<!-- Admin Dashboard (hidden unless ?admin=key) -->
+<div id="admin-dashboard" style="display:none">
+  <div id="admin-header">
+    <h1>📊 CR生成ツール 管理ダッシュボード</h1>
+    <div id="admin-controls">
+      <button class="btn btn-primary" id="btn-admin-refresh">更新</button>
+      <button class="btn btn-outline" id="btn-admin-export">CSV出力</button>
+    </div>
+  </div>
+  <div id="admin-stats">
+    <div class="stat-card">
+      <div class="stat-label">総セッション数</div>
+      <div class="stat-value" id="stat-sessions">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">総生成回数</div>
+      <div class="stat-value" id="stat-generations">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">採用率</div>
+      <div class="stat-value" id="stat-adoption-rate">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">アクティブユーザー</div>
+      <div class="stat-value" id="stat-users">-</div>
+    </div>
+  </div>
+  <div id="admin-tabs">
+    <button class="admin-tab active" data-tab="logs">操作ログ</button>
+    <button class="admin-tab" data-tab="users">ユーザー別</button>
+    <button class="admin-tab" data-tab="prompts">プロンプト分析</button>
+  </div>
+  <div id="admin-content">
+    <div id="admin-tab-logs" class="admin-tab-content active">
+      <table id="admin-log-table">
+        <thead>
+          <tr>
+            <th>日時</th>
+            <th>ユーザー</th>
+            <th>操作</th>
+            <th>プロンプト</th>
+            <th>モデル</th>
+            <th>成功/エラー</th>
+            <th>詳細</th>
+          </tr>
+        </thead>
+        <tbody id="admin-log-body"></tbody>
+      </table>
+    </div>
+    <div id="admin-tab-users" class="admin-tab-content">
+      <table id="admin-user-table">
+        <thead>
+          <tr>
+            <th>ユーザー</th>
+            <th>セッション数</th>
+            <th>生成回数</th>
+            <th>採用数</th>
+            <th>不採用数</th>
+            <th>採用率</th>
+            <th>最終利用</th>
+          </tr>
+        </thead>
+        <tbody id="admin-user-body"></tbody>
+      </table>
+    </div>
+    <div id="admin-tab-prompts" class="admin-tab-content">
+      <table id="admin-prompt-table">
+        <thead>
+          <tr>
+            <th>プロンプト（先頭100文字）</th>
+            <th>使用回数</th>
+            <th>ユーザー</th>
+            <th>採用数</th>
+            <th>平均成功率</th>
+          </tr>
+        </thead>
+        <tbody id="admin-prompt-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Resize Format Picker Modal (small) -->
 <div id="resize-modal" style="display:none">
   <div class="modal-overlay" data-close="resize"></div>
@@ -541,8 +653,42 @@ const State = {
   currentRound: -1,
   currentView: 'round', // 'round' or 'resize'
   generating: false,
-  resizeResults: [], // [{sourceImage, sourceIndex, formats: [{key, w, h, label, status, imageBase64, mimeType, errorMessage}]}]
+  resizeResults: [],
+  // Logging
+  webhookUrl: localStorage.getItem('gemini-webhook-url') || '',
+  sessionId: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  userName: localStorage.getItem('gemini-user-name') || '',
 };
+
+// Admin mode detection
+const ADMIN_KEY = 'cr-tool-admin-2026'; // URL param: ?admin=cr-tool-admin-2026
+const urlParams = new URLSearchParams(window.location.search);
+const isAdminMode = urlParams.get('admin') === ADMIN_KEY;
+
+// ===== Logging =====
+async function sendLog(action, details = {}) {
+  if (!State.webhookUrl) return;
+  const payload = {
+    timestamp: new Date().toISOString(),
+    sessionId: State.sessionId,
+    userName: State.userName || '未設定',
+    action,
+    prompt: State.prompt || '',
+    model: document.getElementById('model-select')?.value || '',
+    aspectRatio: State.aspectRatio,
+    parallelCount: State.parallelCount,
+    ...details,
+  };
+  try {
+    await fetch(State.webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) { /* silent fail */ }
+}
+
 
 // ===== DOM refs =====
 const $apiKey = document.getElementById('api-key');
@@ -576,6 +722,26 @@ $apiKey.value = State.apiKey;
 $parallelCount.value = State.parallelCount;
 $parallelVal.textContent = State.parallelCount;
 $aspectRatio.value = State.aspectRatio;
+
+// ===== User name =====
+const $userName = document.getElementById('user-name');
+$userName.value = State.userName;
+$userName.addEventListener('input', () => {
+  State.userName = $userName.value.trim();
+  localStorage.setItem('gemini-user-name', State.userName);
+});
+
+// ===== Webhook URL (admin only) =====
+const $webhookUrl = document.getElementById('webhook-url');
+const $webhookSection = document.getElementById('webhook-section');
+if (isAdminMode) {
+  $webhookSection.style.display = 'block';
+  $webhookUrl.value = State.webhookUrl;
+  $webhookUrl.addEventListener('input', () => {
+    State.webhookUrl = $webhookUrl.value.trim();
+    localStorage.setItem('gemini-webhook-url', State.webhookUrl);
+  });
+}
 
 // ===== API Key =====
 $apiKey.addEventListener('input', () => {
@@ -840,6 +1006,13 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
   State.generating = true;
   State.abortGeneration = false;
   updateButtons();
+  sendLog('generate_start', {
+    roundNumber: State.rounds.length,
+    parallelCount: State.parallelCount,
+    refImageCount: State.referenceImages.length,
+    productImageCount: State.productImages.length,
+    logoImageCount: State.logoImages.length,
+  });
 
   const roundIndex = State.rounds.length;
   const round = {
@@ -1036,6 +1209,7 @@ ${variation}
   if (cancelCount > 0) statusMsg += ` / ${cancelCount}件中断`;
   setStatus('idle', statusMsg);
   updateButtons();
+  sendLog('generate_complete', { successCount, errorCount, cancelCount, roundNumber: round.id });
   updateSelectionCount();
 }
 
@@ -1182,6 +1356,7 @@ function buildCardHTML(result, index) {
 
 function toggleSelection(result, type, card) {
   result.selection = result.selection === type ? 'none' : type;
+  sendLog('selection', { selectionType: result.selection, imageIndex: State.rounds[State.currentRound]?.results.indexOf(result) });
   card.className = `image-card ${result.selection}`;
   // Re-render card content
   const index = State.rounds[State.currentRound].results.indexOf(result);
@@ -1689,6 +1864,161 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ===== Admin Dashboard =====
+if (isAdminMode) {
+  // Hide main UI, show admin
+  document.getElementById('sidebar').style.display = 'none';
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('selection-toolbar').style.display = 'none';
+  const $admin = document.getElementById('admin-dashboard');
+  $admin.style.display = 'flex';
+
+  // Tab switching
+  document.querySelectorAll('.admin-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`admin-tab-${tab.dataset.tab}`).classList.add('active');
+    });
+  });
+
+  let adminLogs = [];
+
+  async function fetchAdminLogs() {
+    const webhookUrl = localStorage.getItem('gemini-webhook-url');
+    if (!webhookUrl) {
+      showToast('Webhook URLが未設定です。先にメイン画面で設定してください。', 'error');
+      return;
+    }
+    try {
+      const res = await fetch(webhookUrl + '?action=getLogs');
+      if (!res.ok) throw new Error('取得失敗');
+      adminLogs = await res.json();
+      renderAdminDashboard();
+      showToast(`${adminLogs.length}件のログを取得`, 'success');
+    } catch (e) {
+      showToast('ログ取得エラー: ' + e.message, 'error');
+    }
+  }
+
+  function renderAdminDashboard() {
+    // Stats
+    const sessions = new Set(adminLogs.map(l => l.sessionId)).size;
+    const generations = adminLogs.filter(l => l.action === 'generate_complete').length;
+    const selections = adminLogs.filter(l => l.action === 'selection');
+    const adopted = selections.filter(l => l.selectionType === 'selected').length;
+    const rejected = selections.filter(l => l.selectionType === 'rejected').length;
+    const adoptionRate = (adopted + rejected) > 0 ? Math.round(adopted / (adopted + rejected) * 100) : 0;
+    const users = new Set(adminLogs.map(l => l.userName).filter(Boolean)).size;
+
+    document.getElementById('stat-sessions').textContent = sessions;
+    document.getElementById('stat-generations').textContent = generations;
+    document.getElementById('stat-adoption-rate').textContent = adoptionRate + '%';
+    document.getElementById('stat-users').textContent = users;
+
+    // Log table
+    const $logBody = document.getElementById('admin-log-body');
+    $logBody.innerHTML = '';
+    const sorted = [...adminLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    sorted.slice(0, 200).forEach(log => {
+      const tr = document.createElement('tr');
+      const actionLabels = {
+        'generate_start': '🚀 生成開始',
+        'generate_complete': '✅ 生成完了',
+        'selection': log.selectionType === 'selected' ? '👍 採用' : log.selectionType === 'rejected' ? '👎 不採用' : '↩ 選択解除',
+      };
+      const details = [];
+      if (log.successCount !== undefined) details.push(`成功:${log.successCount}`);
+      if (log.errorCount !== undefined) details.push(`エラー:${log.errorCount}`);
+      if (log.parallelCount !== undefined && log.action === 'generate_start') details.push(`同時:${log.parallelCount}`);
+      tr.innerHTML = `
+        <td>${new Date(log.timestamp).toLocaleString('ja-JP')}</td>
+        <td>${escapeHtml(log.userName || '未設定')}</td>
+        <td>${actionLabels[log.action] || log.action}</td>
+        <td title="${escapeHtml(log.prompt || '')}">${escapeHtml((log.prompt || '').slice(0, 60))}</td>
+        <td>${escapeHtml(log.model || '-')}</td>
+        <td>${details.join(' / ') || '-'}</td>
+        <td>${escapeHtml(log.aspectRatio || '-')}</td>
+      `;
+      $logBody.appendChild(tr);
+    });
+
+    // User table
+    const $userBody = document.getElementById('admin-user-body');
+    $userBody.innerHTML = '';
+    const userMap = {};
+    adminLogs.forEach(log => {
+      const name = log.userName || '未設定';
+      if (!userMap[name]) userMap[name] = { sessions: new Set(), generates: 0, adopted: 0, rejected: 0, lastUsed: '' };
+      userMap[name].sessions.add(log.sessionId);
+      if (log.action === 'generate_complete') userMap[name].generates++;
+      if (log.action === 'selection' && log.selectionType === 'selected') userMap[name].adopted++;
+      if (log.action === 'selection' && log.selectionType === 'rejected') userMap[name].rejected++;
+      if (!userMap[name].lastUsed || log.timestamp > userMap[name].lastUsed) userMap[name].lastUsed = log.timestamp;
+    });
+    Object.entries(userMap).sort((a, b) => b[1].generates - a[1].generates).forEach(([name, data]) => {
+      const rate = (data.adopted + data.rejected) > 0 ? Math.round(data.adopted / (data.adopted + data.rejected) * 100) : 0;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(name)}</td>
+        <td>${data.sessions.size}</td>
+        <td>${data.generates}</td>
+        <td>${data.adopted}</td>
+        <td>${data.rejected}</td>
+        <td>${rate}%</td>
+        <td>${data.lastUsed ? new Date(data.lastUsed).toLocaleString('ja-JP') : '-'}</td>
+      `;
+      $userBody.appendChild(tr);
+    });
+
+    // Prompt table
+    const $promptBody = document.getElementById('admin-prompt-body');
+    $promptBody.innerHTML = '';
+    const promptMap = {};
+    adminLogs.filter(l => l.action === 'generate_complete' && l.prompt).forEach(log => {
+      const key = log.prompt.slice(0, 100);
+      if (!promptMap[key]) promptMap[key] = { count: 0, users: new Set(), adopted: 0, successTotal: 0 };
+      promptMap[key].count++;
+      promptMap[key].users.add(log.userName || '未設定');
+      promptMap[key].successTotal += (log.successCount || 0);
+    });
+    // Match adoptions to prompts via session
+    Object.entries(promptMap).sort((a, b) => b[1].count - a[1].count).forEach(([prompt, data]) => {
+      const avgSuccess = data.count > 0 ? Math.round(data.successTotal / data.count * 10) / 10 : 0;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td title="${escapeHtml(prompt)}">${escapeHtml(prompt)}</td>
+        <td>${data.count}</td>
+        <td>${[...data.users].join(', ')}</td>
+        <td>-</td>
+        <td>${avgSuccess}件/回</td>
+      `;
+      $promptBody.appendChild(tr);
+    });
+  }
+
+  // CSV export
+  document.getElementById('btn-admin-export').addEventListener('click', () => {
+    if (adminLogs.length === 0) { showToast('データがありません', 'error'); return; }
+    const headers = ['timestamp', 'sessionId', 'userName', 'action', 'prompt', 'model', 'aspectRatio', 'parallelCount', 'successCount', 'errorCount', 'selectionType'];
+    const csv = [headers.join(',')];
+    adminLogs.forEach(log => {
+      csv.push(headers.map(h => `"${String(log[h] || '').replace(/"/g, '""')}"`).join(','));
+    });
+    const blob = new Blob(['\uFEFF' + csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cr-tool-logs_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  });
+
+  document.getElementById('btn-admin-refresh').addEventListener('click', fetchAdminLogs);
+
+  // Initial load
+  fetchAdminLogs();
 }
 </script>
 </body>
