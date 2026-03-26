@@ -1871,9 +1871,29 @@ if (isAdminMode) {
   // Hide main UI, show admin
   document.getElementById('sidebar').style.display = 'none';
   document.getElementById('main').style.display = 'none';
-  document.getElementById('selection-toolbar').style.display = 'none';
+  const selToolbarEl = document.getElementById('selection-toolbar');
+  if (selToolbarEl) selToolbarEl.style.display = 'none';
   const $admin = document.getElementById('admin-dashboard');
   $admin.style.display = 'flex';
+
+  // Show webhook URL setting in admin dashboard header
+  const webhookInput = document.createElement('div');
+  webhookInput.style.cssText = 'display:flex;gap:8px;align-items:center;margin-left:16px;flex:1;max-width:600px';
+  webhookInput.innerHTML = `
+    <label style="white-space:nowrap;font-size:.85rem;color:var(--text-secondary)">Webhook URL:</label>
+    <input type="text" id="admin-webhook-url" value="${escapeHtml(State.webhookUrl)}"
+      placeholder="Apps Script URL を貼り付け"
+      style="flex:1;padding:6px 10px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:.85rem">
+    <button class="btn btn-outline" id="btn-save-webhook" style="padding:6px 12px;font-size:.8rem;white-space:nowrap">保存</button>
+  `;
+  document.getElementById('admin-controls').prepend(webhookInput);
+  document.getElementById('btn-save-webhook').addEventListener('click', () => {
+    const url = document.getElementById('admin-webhook-url').value.trim();
+    State.webhookUrl = url;
+    localStorage.setItem('gemini-webhook-url', url);
+    showToast('Webhook URLを保存しました', 'success');
+    fetchAdminLogs();
+  });
 
   // Tab switching
   document.querySelectorAll('.admin-tab').forEach(tab => {
