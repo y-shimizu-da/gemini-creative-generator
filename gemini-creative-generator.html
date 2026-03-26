@@ -335,6 +335,31 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 .sub-preview .thumb{position:relative;width:40px;height:40px}
 .sub-preview .thumb img{width:100%;height:100%;object-fit:cover;border-radius:4px;border:1px solid var(--border)}
 .sub-preview .thumb .remove{position:absolute;top:-4px;right:-4px;background:var(--accent);color:#fff;border:none;border-radius:50%;width:14px;height:14px;font-size:10px;line-height:14px;text-align:center;cursor:pointer;padding:0}
+/* History Modal */
+#history-modal-content{position:relative;z-index:1001;background:var(--bg-secondary);border-radius:12px;width:90vw;max-width:1200px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+#history-body{flex:1;overflow-y:auto;padding:20px}
+#history-list{display:flex;flex-direction:column;gap:12px}
+.history-item{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:border-color .2s}
+.history-item:hover{border-color:var(--accent)}
+.history-item-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.history-item-date{font-size:.9rem;font-weight:600;color:var(--text-primary)}
+.history-item-stats{font-size:.8rem;color:var(--text-secondary)}
+.history-item-prompt{font-size:.8rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.history-item-thumbs{display:flex;gap:6px;margin-top:10px;overflow-x:auto}
+.history-item-thumbs img{width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0}
+#history-detail-info{margin-bottom:16px;padding:12px;background:var(--bg-card);border-radius:8px;font-size:.85rem;color:var(--text-secondary)}
+#history-detail-info strong{color:var(--text-primary)}
+#history-detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.history-detail-card{position:relative;border-radius:8px;overflow:hidden;background:var(--bg-card);border:1px solid var(--border)}
+.history-detail-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.history-detail-card .badge{position:absolute;top:6px;right:6px;padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:600}
+.history-detail-card .badge-selected{background:var(--accent-green);color:#fff}
+.history-detail-card .badge-rejected{background:var(--accent);color:#fff}
+.history-detail-card .card-dl{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.7);border:none;color:#fff;padding:4px 8px;border-radius:4px;font-size:.7rem;cursor:pointer}
+.history-detail-card .card-dl:hover{background:rgba(0,0,0,.9)}
+.history-empty{text-align:center;padding:60px 20px;color:var(--text-secondary);font-size:.95rem}
+.history-item-delete{background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:4px}
+.history-item-delete:hover{color:var(--accent);background:rgba(233,69,96,.1)}
 /* Admin Dashboard */
 #admin-dashboard{display:none;flex-direction:column;width:100%;height:100vh;padding:20px;overflow-y:auto;background:var(--bg-primary)}
 #admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
@@ -469,6 +494,9 @@ select option{background:var(--bg-input)}
     <button class="btn btn-outline" id="btn-resize" disabled>リサイズ変換</button>
     <button class="btn btn-outline" id="btn-download" disabled>DL</button>
   </div>
+  <div class="btn-group">
+    <button class="btn btn-outline" id="btn-history" style="width:100%;border-color:var(--text-secondary)">📂 履歴を見る</button>
+  </div>
 
   <div id="status-bar">
     <div class="dot" id="status-dot"></div>
@@ -501,6 +529,25 @@ select option{background:var(--bg-input)}
     <button class="btn btn-outline" id="btn-retry-all" style="padding:6px 12px;font-size:.8rem;border-color:var(--accent);color:var(--accent)">エラーを全て再試行</button>
     <button class="btn btn-outline" id="btn-select-all" style="padding:6px 12px;font-size:.8rem">全選択</button>
     <button class="btn btn-outline" id="btn-deselect-all" style="padding:6px 12px;font-size:.8rem">全解除</button>
+  </div>
+</div>
+
+<!-- History View -->
+<div id="history-modal" style="display:none">
+  <div class="modal-overlay" data-close="history"></div>
+  <div id="history-modal-content">
+    <div class="modal-header">
+      <h3>📂 生成履歴</h3>
+      <button class="modal-close" data-close="history">&times;</button>
+    </div>
+    <div id="history-body">
+      <div id="history-list"></div>
+      <div id="history-detail" style="display:none">
+        <button class="btn btn-outline" id="btn-history-back" style="margin-bottom:12px;font-size:.8rem">← 一覧に戻る</button>
+        <div id="history-detail-info"></div>
+        <div id="history-detail-grid"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -664,6 +711,112 @@ const State = {
 const ADMIN_KEY = 'cr-tool-admin-2026'; // URL param: ?admin=cr-tool-admin-2026
 const urlParams = new URLSearchParams(window.location.search);
 const isAdminMode = urlParams.get('admin') === ADMIN_KEY;
+
+// ===== IndexedDB History =====
+const DB_NAME = 'cr-tool-history';
+const DB_VERSION = 1;
+const STORE_NAME = 'sessions';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+let currentHistoryId = null; // Track current session's DB id
+
+async function saveSessionToHistory() {
+  const successResults = [];
+  State.rounds.forEach(round => {
+    round.results.forEach(r => {
+      if (r.status === 'success') {
+        successResults.push({
+          imageBase64: r.imageBase64,
+          mimeType: r.mimeType,
+          selection: r.selection,
+        });
+      }
+    });
+  });
+  if (successResults.length === 0) return;
+
+  const session = {
+    timestamp: new Date().toISOString(),
+    prompt: State.prompt,
+    model: document.getElementById('model-select')?.value || '',
+    aspectRatio: State.aspectRatio,
+    parallelCount: State.parallelCount,
+    totalGenerated: successResults.length,
+    selectedCount: successResults.filter(r => r.selection === 'selected').length,
+    rejectedCount: successResults.filter(r => r.selection === 'rejected').length,
+    images: successResults,
+  };
+
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+
+    if (currentHistoryId) {
+      // Update existing session record
+      session.id = currentHistoryId;
+      store.put(session);
+    } else {
+      // New session - add and remember the id
+      const req = store.add(session);
+      req.onsuccess = () => { currentHistoryId = req.result; };
+    }
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+
+    // Keep only last 50 sessions
+    const countTx = db.transaction(STORE_NAME, 'readonly');
+    const countReq = countTx.objectStore(STORE_NAME).count();
+    countReq.onsuccess = async () => {
+      if (countReq.result > 50) {
+        const delTx = db.transaction(STORE_NAME, 'readwrite');
+        const delStore = delTx.objectStore(STORE_NAME);
+        const cursor = delStore.openCursor();
+        let deleted = 0;
+        const toDelete = countReq.result - 50;
+        cursor.onsuccess = () => {
+          const c = cursor.result;
+          if (c && deleted < toDelete) { c.delete(); deleted++; c.continue(); }
+        };
+      }
+    };
+  } catch (e) { console.warn('History save failed:', e); }
+}
+
+async function getAllSessions() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return new Promise((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result.reverse()); // newest first
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { return []; }
+}
+
+async function deleteSession(id) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+  } catch (e) { console.warn('Delete failed:', e); }
+}
 
 // ===== Logging =====
 async function sendLog(action, details = {}) {
@@ -1210,6 +1363,7 @@ ${variation}
   setStatus('idle', statusMsg);
   updateButtons();
   sendLog('generate_complete', { successCount, errorCount, cancelCount, roundNumber: round.id });
+  saveSessionToHistory();
   updateSelectionCount();
 }
 
@@ -1357,6 +1511,8 @@ function buildCardHTML(result, index) {
 function toggleSelection(result, type, card) {
   result.selection = result.selection === type ? 'none' : type;
   sendLog('selection', { selectionType: result.selection, imageIndex: State.rounds[State.currentRound]?.results.indexOf(result) });
+  // Update history with latest selection status
+  saveSessionToHistory();
   card.className = `image-card ${result.selection}`;
   // Re-render card content
   const index = State.rounds[State.currentRound].results.indexOf(result);
@@ -1864,6 +2020,120 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ===== History =====
+const $historyModal = document.getElementById('history-modal');
+const $historyList = document.getElementById('history-list');
+const $historyDetail = document.getElementById('history-detail');
+
+document.getElementById('btn-history').addEventListener('click', () => openHistoryModal());
+$historyModal.querySelector('.modal-overlay').addEventListener('click', () => { $historyModal.style.display = 'none'; });
+$historyModal.querySelector('.modal-close').addEventListener('click', () => { $historyModal.style.display = 'none'; });
+document.getElementById('btn-history-back').addEventListener('click', () => {
+  $historyDetail.style.display = 'none';
+  $historyList.style.display = 'flex';
+});
+
+async function openHistoryModal() {
+  $historyModal.style.display = 'flex';
+  $historyDetail.style.display = 'none';
+  $historyList.style.display = 'flex';
+  $historyList.innerHTML = '<div class="history-empty">読み込み中...</div>';
+
+  const sessions = await getAllSessions();
+  if (sessions.length === 0) {
+    $historyList.innerHTML = '<div class="history-empty">履歴がありません。生成を実行すると自動的に保存されます。</div>';
+    return;
+  }
+
+  $historyList.innerHTML = '';
+  sessions.forEach(session => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+
+    const date = new Date(session.timestamp).toLocaleString('ja-JP');
+    const promptPreview = (session.prompt || 'プロンプトなし').slice(0, 80);
+    const thumbs = session.images.slice(0, 6);
+
+    item.innerHTML = `
+      <div class="history-item-header">
+        <div>
+          <div class="history-item-date">${date}</div>
+          <div class="history-item-stats">
+            ${session.totalGenerated}枚生成 / 採用${session.selectedCount} / 不採用${session.rejectedCount}
+            ・${session.model || '-'} ・${session.aspectRatio || '-'}
+          </div>
+        </div>
+        <button class="history-item-delete" title="削除" data-id="${session.id}">🗑</button>
+      </div>
+      <div class="history-item-prompt">${escapeHtml(promptPreview)}</div>
+      <div class="history-item-thumbs">
+        ${thumbs.map(img => `<img src="data:${img.mimeType};base64,${img.imageBase64}" alt="thumb">`).join('')}
+        ${session.images.length > 6 ? `<span style="display:flex;align-items:center;font-size:.8rem;color:var(--text-secondary);padding:0 8px">+${session.images.length - 6}枚</span>` : ''}
+      </div>
+    `;
+
+    // Click to view detail (but not on delete button)
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.history-item-delete')) return;
+      showHistoryDetail(session);
+    });
+
+    // Delete button
+    const delBtn = item.querySelector('.history-item-delete');
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('この履歴を削除しますか？')) return;
+      await deleteSession(session.id);
+      item.remove();
+      showToast('履歴を削除しました', 'info');
+      if ($historyList.children.length === 0) {
+        $historyList.innerHTML = '<div class="history-empty">履歴がありません。</div>';
+      }
+    });
+
+    $historyList.appendChild(item);
+  });
+}
+
+function showHistoryDetail(session) {
+  $historyList.style.display = 'none';
+  $historyDetail.style.display = 'block';
+
+  const date = new Date(session.timestamp).toLocaleString('ja-JP');
+  document.getElementById('history-detail-info').innerHTML = `
+    <div style="margin-bottom:6px"><strong>${date}</strong></div>
+    <div>モデル: ${session.model || '-'} ・アスペクト比: ${session.aspectRatio || '-'} ・同時生成数: ${session.parallelCount || '-'}</div>
+    <div style="margin-top:6px">採用: ${session.selectedCount} / 不採用: ${session.rejectedCount} / 合計: ${session.totalGenerated}</div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><strong>プロンプト:</strong><br><span style="white-space:pre-wrap;font-size:.8rem">${escapeHtml(session.prompt || 'なし')}</span></div>
+  `;
+
+  const $grid = document.getElementById('history-detail-grid');
+  $grid.innerHTML = '';
+  session.images.forEach((img, i) => {
+    const card = document.createElement('div');
+    card.className = 'history-detail-card';
+    let badge = '';
+    if (img.selection === 'selected') badge = '<div class="badge badge-selected">採用</div>';
+    else if (img.selection === 'rejected') badge = '<div class="badge badge-rejected">不採用</div>';
+
+    card.innerHTML = `
+      <img src="data:${img.mimeType};base64,${img.imageBase64}" alt="Generated ${i + 1}">
+      ${badge}
+      <button class="card-dl" data-index="${i}">DL</button>
+    `;
+
+    card.querySelector('.card-dl').addEventListener('click', () => {
+      const ext = img.mimeType.split('/')[1] || 'png';
+      const a = document.createElement('a');
+      a.href = `data:${img.mimeType};base64,${img.imageBase64}`;
+      a.download = `history_${i + 1}.${ext}`;
+      a.click();
+    });
+
+    $grid.appendChild(card);
+  });
 }
 
 // ===== Admin Dashboard =====
