@@ -1089,6 +1089,15 @@ setupSubUpload('product-upload-zone', 'product-file-input', 'product-preview-ima
 setupSubUpload('logo-upload-zone', 'logo-file-input', 'logo-preview-images', 'logoImages');
 
 // ===== Resize image to exact pixel dimensions =====
+function getImageDimensions(base64, mimeType) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 0, h: 0 });
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+}
+
 // Pure canvas resize: scale to fit within target, fill remaining area with edge color
 function canvasResize(base64, mimeType, targetW, targetH) {
   return new Promise((resolve, reject) => {
@@ -1855,16 +1864,23 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
   // Close modal and switch to resize view
   closeResizeModal();
 
-  // Build resize result structure
-  State.resizeResults = selected.map((r, idx) => ({
-    sourceImage: r.imageBase64,
-    sourceMimeType: r.mimeType,
-    sourceIndex: idx,
-    formats: checkedFormats.map(fmt => ({
-      key: fmt.key, w: fmt.w, h: fmt.h, label: fmt.label,
-      status: 'loading', imageBase64: null, mimeType: null, errorMessage: null
-    }))
-  }));
+  // Get source image dimensions and build resize result structure
+  const resizeEntries = [];
+  for (const [idx, r] of selected.entries()) {
+    const dims = await getImageDimensions(r.imageBase64, r.mimeType);
+    resizeEntries.push({
+      sourceImage: r.imageBase64,
+      sourceMimeType: r.mimeType,
+      sourceIndex: idx,
+      sourceW: dims.w,
+      sourceH: dims.h,
+      formats: checkedFormats.map(fmt => ({
+        key: fmt.key, w: fmt.w, h: fmt.h, label: fmt.label,
+        status: 'loading', imageBase64: null, mimeType: null, errorMessage: null
+      }))
+    });
+  }
+  State.resizeResults = resizeEntries;
 
   State.currentView = 'resize';
   renderRoundTabs();
@@ -1884,11 +1900,47 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
     for (let fi = 0; fi < srcEntry.formats.length; fi++) {
       const fmt = srcEntry.formats[fi];
 
+      // Check if aspect ratio is the same → pure canvas resize
+      const srcRatio = Math.round((srcEntry.sourceW / srcEntry.sourceH) * 100);
+      const fmtRatio = Math.round((fmt.w / fmt.h) * 100);
+      const sameAspect = srcRatio === fmtRatio;
+
       try {
-        const resized = await canvasResize(srcEntry.sourceImage, srcEntry.sourceMimeType, fmt.w, fmt.h);
-        fmt.status = 'success';
-        fmt.imageBase64 = resized.base64;
-        fmt.mimeType = resized.mimeType;
+        if (sameAspect) {
+          // Same aspect ratio: pure canvas resize (no AI needed)
+          const resized = await canvasResize(srcEntry.sourceImage, srcEntry.sourceMimeType, fmt.w, fmt.h);
+          fmt.status = 'success';
+          fmt.imageBase64 = resized.base64;
+          fmt.mimeType = resized.mimeType;
+        } else {
+          // Different aspect ratio: use AI to re-layout
+          const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+          const g = gcd(fmt.w, fmt.h);
+          const ratioW = fmt.w / g;
+          const ratioH = fmt.h / g;
+
+          const parts = [
+            { text: `この広告クリエイティブ画像を${fmt.w}×${fmt.h}ピクセル（アスペクト比 ${ratioW}:${ratioH}）用にリサイズしてください。
+
+【絶対に守るルール】
+・背景色、配色、グラデーション、フォント、テキスト内容は一切変更しないでください。
+・テキストは一字一句同じものを使用してください。
+・ロゴ、商品画像、写真などの要素はオリジナルと同一のものを使ってください。
+・新しい要素を追加したり、既存の要素を削除しないでください。
+
+【やること】
+・新しいアスペクト比に合わせて、各要素（テキスト、画像、ロゴ等）の位置とサイズを再配置してください。
+・全ての要素がフレーム内に収まるようにレイアウトを調整してください。
+・画像は1枚だけ出力してください。` },
+            { inlineData: { mimeType: srcEntry.sourceMimeType, data: srcEntry.sourceImage } }
+          ];
+
+          const data = await callGeminiAPIWithRetry(parts, 3);
+          const resized = await resizeImageToPixels(data.imageBase64, data.mimeType, fmt.w, fmt.h);
+          fmt.status = 'success';
+          fmt.imageBase64 = resized.base64;
+          fmt.mimeType = resized.mimeType;
+        }
       } catch (err) {
         fmt.status = 'error';
         fmt.errorMessage = err.message;
@@ -1899,6 +1951,11 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
       $progressBar.style.width = pct + '%';
       $statusText.textContent = `変換中... (${completedJobs}/${totalJobs})`;
       if (State.currentView === 'resize') renderResizeView();
+
+      // Stagger API calls to avoid rate limits (only for AI resize)
+      if (!sameAspect && completedJobs < totalJobs) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
     }
   }
 
