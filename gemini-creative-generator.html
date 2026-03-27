@@ -315,8 +315,16 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 #edit-modal-close{background:none;border:none;color:var(--text-secondary);font-size:1.5rem;cursor:pointer;padding:0 4px}
 #edit-modal-close:hover{color:var(--text-primary)}
 #edit-modal-body{display:flex;flex:1;overflow:hidden;min-height:0}
-#edit-image-container{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;background:var(--bg-primary)}
-#edit-image-container img{max-width:100%;max-height:60vh;border-radius:8px;object-fit:contain}
+#edit-image-container{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;overflow:auto;background:var(--bg-primary);gap:8px}
+#edit-canvas-wrapper{position:relative;display:inline-block;cursor:crosshair}
+#edit-canvas-wrapper img{max-width:100%;max-height:55vh;border-radius:8px;object-fit:contain;display:block;user-select:none;-webkit-user-drag:none}
+#edit-canvas{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;pointer-events:auto;cursor:crosshair}
+#edit-brush-toolbar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap}
+.brush-tool{background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:4px 10px;cursor:pointer;font-size:.9rem;transition:all .2s}
+.brush-tool:hover{border-color:var(--accent-light)}
+.brush-tool.active{border-color:var(--accent);background:rgba(233,69,96,.15)}
+.brush-label{font-size:.75rem;color:var(--text-secondary);white-space:nowrap}
+.brush-divider{width:1px;height:20px;background:var(--border);margin:0 4px}
 #edit-controls{width:320px;display:flex;flex-direction:column;padding:16px;border-left:1px solid var(--border);gap:12px}
 #edit-instruction{flex:none;height:140px;resize:vertical;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);padding:10px;font-size:.85rem;font-family:inherit}
 #edit-history{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;min-height:0}
@@ -672,9 +680,26 @@ select option{background:var(--bg-input)}
     </div>
     <div id="edit-modal-body">
       <div id="edit-image-container">
-        <img id="edit-preview" alt="Edit preview">
+        <div id="edit-canvas-wrapper">
+          <img id="edit-preview" alt="Edit preview">
+          <canvas id="edit-canvas"></canvas>
+        </div>
+        <div id="edit-brush-toolbar">
+          <button class="brush-tool active" id="brush-draw" title="ブラシ">🖌</button>
+          <button class="brush-tool" id="brush-erase" title="消しゴム">🧹</button>
+          <div class="brush-divider"></div>
+          <label class="brush-label">サイズ</label>
+          <input type="range" id="brush-size" min="5" max="80" value="25" style="width:100px">
+          <span id="brush-size-val" style="font-size:.75rem;color:var(--text-secondary);min-width:28px">25</span>
+          <div class="brush-divider"></div>
+          <button class="brush-tool" id="brush-clear" title="全消去">🗑</button>
+          <button class="brush-tool" id="brush-undo" title="元に戻す">↩</button>
+        </div>
       </div>
       <div id="edit-controls">
+        <div id="edit-mode-hint" style="font-size:.75rem;color:var(--text-secondary);padding:4px 8px;background:var(--bg-input);border-radius:var(--radius);line-height:1.4">
+          💡 修正したい箇所をブラシで塗ってから指示を入力すると、より正確に修正できます
+        </div>
         <textarea id="edit-instruction" placeholder="修正指示を入力...&#10;例:&#10;・見出しのテキストを「○○」に変更&#10;・背景色を青に変更&#10;・右下にロゴを追加&#10;・フォントを大きくして目立たせる"></textarea>
         <div id="edit-history"></div>
         <div id="edit-buttons">
@@ -1935,8 +1960,134 @@ let editState = { result: null, index: -1, history: [] };
 
 const $editModal = document.getElementById('edit-modal');
 const $editPreview = document.getElementById('edit-preview');
+const $editCanvas = document.getElementById('edit-canvas');
 const $editInstruction = document.getElementById('edit-instruction');
 const $editHistory = document.getElementById('edit-history');
+const editCtx = $editCanvas.getContext('2d');
+
+// Brush state
+const brushState = {
+  drawing: false,
+  mode: 'draw', // 'draw' or 'erase'
+  size: 25,
+  color: 'rgba(233, 69, 96, 0.45)',
+  undoStack: [],
+  maxUndo: 20,
+};
+
+// Brush toolbar events
+const $brushSize = document.getElementById('brush-size');
+const $brushSizeVal = document.getElementById('brush-size-val');
+$brushSize.addEventListener('input', () => {
+  brushState.size = parseInt($brushSize.value);
+  $brushSizeVal.textContent = brushState.size;
+});
+document.getElementById('brush-draw').addEventListener('click', () => {
+  brushState.mode = 'draw';
+  document.getElementById('brush-draw').classList.add('active');
+  document.getElementById('brush-erase').classList.remove('active');
+});
+document.getElementById('brush-erase').addEventListener('click', () => {
+  brushState.mode = 'erase';
+  document.getElementById('brush-erase').classList.add('active');
+  document.getElementById('brush-draw').classList.remove('active');
+});
+document.getElementById('brush-clear').addEventListener('click', () => {
+  saveCanvasUndo();
+  editCtx.clearRect(0, 0, $editCanvas.width, $editCanvas.height);
+});
+document.getElementById('brush-undo').addEventListener('click', () => {
+  if (brushState.undoStack.length === 0) return;
+  const imgData = brushState.undoStack.pop();
+  editCtx.putImageData(imgData, 0, 0);
+});
+
+function saveCanvasUndo() {
+  if (brushState.undoStack.length >= brushState.maxUndo) brushState.undoStack.shift();
+  brushState.undoStack.push(editCtx.getImageData(0, 0, $editCanvas.width, $editCanvas.height));
+}
+
+// Canvas drawing
+function getCanvasPos(e) {
+  const rect = $editCanvas.getBoundingClientRect();
+  const scaleX = $editCanvas.width / rect.width;
+  const scaleY = $editCanvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+}
+
+function startDraw(e) {
+  e.preventDefault();
+  brushState.drawing = true;
+  saveCanvasUndo();
+  const pos = getCanvasPos(e);
+  editCtx.beginPath();
+  editCtx.moveTo(pos.x, pos.y);
+}
+function draw(e) {
+  if (!brushState.drawing) return;
+  e.preventDefault();
+  const pos = getCanvasPos(e);
+  editCtx.lineWidth = brushState.size;
+  editCtx.lineCap = 'round';
+  editCtx.lineJoin = 'round';
+  if (brushState.mode === 'erase') {
+    editCtx.globalCompositeOperation = 'destination-out';
+    editCtx.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    editCtx.globalCompositeOperation = 'source-over';
+    editCtx.strokeStyle = brushState.color;
+  }
+  editCtx.lineTo(pos.x, pos.y);
+  editCtx.stroke();
+  editCtx.beginPath();
+  editCtx.moveTo(pos.x, pos.y);
+}
+function endDraw(e) {
+  if (brushState.drawing) {
+    brushState.drawing = false;
+    editCtx.beginPath();
+  }
+}
+
+// Mouse events
+$editCanvas.addEventListener('mousedown', startDraw);
+$editCanvas.addEventListener('mousemove', draw);
+$editCanvas.addEventListener('mouseup', endDraw);
+$editCanvas.addEventListener('mouseleave', endDraw);
+// Touch events
+$editCanvas.addEventListener('touchstart', startDraw, { passive: false });
+$editCanvas.addEventListener('touchmove', draw, { passive: false });
+$editCanvas.addEventListener('touchend', endDraw);
+
+function initCanvas() {
+  // Size canvas to match the displayed image
+  const img = $editPreview;
+  $editCanvas.width = img.naturalWidth;
+  $editCanvas.height = img.naturalHeight;
+  editCtx.clearRect(0, 0, $editCanvas.width, $editCanvas.height);
+  brushState.undoStack = [];
+}
+
+function hasBrushMarks() {
+  const data = editCtx.getImageData(0, 0, $editCanvas.width, $editCanvas.height).data;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] > 0) return true;
+  }
+  return false;
+}
+
+function getMarkedImageBase64() {
+  // Composite: original image + brush marks overlay
+  const canvas = document.createElement('canvas');
+  canvas.width = $editPreview.naturalWidth;
+  canvas.height = $editPreview.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage($editPreview, 0, 0);
+  ctx.drawImage($editCanvas, 0, 0);
+  return canvas.toDataURL('image/png').split(',')[1];
+}
 
 function openEditModal(result, index) {
   editState = { result, index, history: [] };
@@ -1944,6 +2095,8 @@ function openEditModal(result, index) {
   $editInstruction.value = '';
   $editHistory.innerHTML = '';
   $editModal.style.display = 'flex';
+  // Init canvas after image loads
+  $editPreview.onload = () => initCanvas();
 }
 
 function closeEditModal() {
@@ -1977,10 +2130,33 @@ document.getElementById('btn-edit-apply').addEventListener('click', async () => 
   $editHistory.appendChild(histItem);
   $editHistory.scrollTop = $editHistory.scrollHeight;
 
-  const parts = [
-    { text: `以下の画像を修正してください。修正指示以外の部分はできるだけ変更しないでください。\n\n【修正指示】\n${instruction}\n\n画像サイズは${State.targetW}×${State.targetH}pxを想定した構図を維持してください。` },
-    { inlineData: { mimeType: editState.result.mimeType, data: editState.result.imageBase64 } }
-  ];
+  const brushUsed = hasBrushMarks();
+  const parts = [];
+
+  if (brushUsed) {
+    // Send marked-up image (original + brush overlay) for precise editing
+    const markedBase64 = getMarkedImageBase64();
+    parts.push({
+      text: `以下の2枚の画像を確認してください。
+1枚目: 赤くマーキングされた箇所が修正対象です。赤い部分のみを修正してください。
+2枚目: 修正前のオリジナル画像です。
+
+【修正指示】
+${instruction}
+
+【重要ルール】
+・赤くマーキングされた箇所のみを修正し、それ以外の部分は一切変更しないでください。
+・出力はオリジナル画像と同じサイズ・構図の1枚の画像にしてください。
+・画像サイズは${State.targetW}×${State.targetH}pxを想定した構図を維持してください。`
+    });
+    parts.push({ inlineData: { mimeType: 'image/png', data: markedBase64 } });
+    parts.push({ inlineData: { mimeType: editState.result.mimeType, data: editState.result.imageBase64 } });
+  } else {
+    parts.push({
+      text: `以下の画像を修正してください。修正指示以外の部分はできるだけ変更しないでください。\n\n【修正指示】\n${instruction}\n\n画像サイズは${State.targetW}×${State.targetH}pxを想定した構図を維持してください。`
+    });
+    parts.push({ inlineData: { mimeType: editState.result.mimeType, data: editState.result.imageBase64 } });
+  }
 
   try {
     const data = await callGeminiAPIWithRetry(parts, 2);
@@ -1997,6 +2173,8 @@ document.getElementById('btn-edit-apply').addEventListener('click', async () => 
 
     editState.history.push(instruction);
     $editInstruction.value = '';
+    // Clear brush marks and reinit canvas for next edit
+    initCanvas();
     showToast('修正が完了しました', 'success');
   } catch (err) {
     showToast('修正に失敗: ' + err.message, 'error');
