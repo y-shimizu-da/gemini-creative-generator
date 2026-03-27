@@ -1089,6 +1089,64 @@ setupSubUpload('product-upload-zone', 'product-file-input', 'product-preview-ima
 setupSubUpload('logo-upload-zone', 'logo-file-input', 'logo-preview-images', 'logoImages');
 
 // ===== Resize image to exact pixel dimensions =====
+// Pure canvas resize: scale to fit within target, fill remaining area with edge color
+function canvasResize(base64, mimeType, targetW, targetH) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+
+      // Scale to fit (contain) - no cropping
+      const scale = Math.min(targetW / img.width, targetH / img.height);
+      const drawW = Math.round(img.width * scale);
+      const drawH = Math.round(img.height * scale);
+      const offsetX = Math.round((targetW - drawW) / 2);
+      const offsetY = Math.round((targetH - drawH) / 2);
+
+      // Sample edge colors to fill background (top-left corner average)
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = img.width;
+      sampleCanvas.height = img.height;
+      const sCtx = sampleCanvas.getContext('2d');
+      sCtx.drawImage(img, 0, 0);
+
+      // Sample from 4 edges and average
+      const edgePixels = [];
+      const sampleSize = 5;
+      for (let i = 0; i < sampleSize; i++) {
+        // Top edge
+        edgePixels.push(sCtx.getImageData(Math.floor(img.width * i / sampleSize), 0, 1, 1).data);
+        // Bottom edge
+        edgePixels.push(sCtx.getImageData(Math.floor(img.width * i / sampleSize), img.height - 1, 1, 1).data);
+        // Left edge
+        edgePixels.push(sCtx.getImageData(0, Math.floor(img.height * i / sampleSize), 1, 1).data);
+        // Right edge
+        edgePixels.push(sCtx.getImageData(img.width - 1, Math.floor(img.height * i / sampleSize), 1, 1).data);
+      }
+      let r = 0, g = 0, b = 0;
+      edgePixels.forEach(p => { r += p[0]; g += p[1]; b += p[2]; });
+      const n = edgePixels.length;
+      const bgColor = `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`;
+
+      // Fill background with edge color
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, targetW, targetH);
+
+      // Draw image centered
+      ctx.drawImage(img, 0, 0, img.width, img.height, offsetX, offsetY, drawW, drawH);
+
+      const outType = 'image/png';
+      const dataUrl = canvas.toDataURL(outType, 1.0);
+      resolve({ base64: dataUrl.split(',')[1], mimeType: outType });
+    };
+    img.onerror = () => reject(new Error('画像の読み込みに失敗'));
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+}
+
 function resizeImageToPixels(base64, mimeType, targetW, targetH) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -1826,26 +1884,8 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
     for (let fi = 0; fi < srcEntry.formats.length; fi++) {
       const fmt = srcEntry.formats[fi];
 
-      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-      const g = gcd(fmt.w, fmt.h);
-      const ratioW = fmt.w / g;
-      const ratioH = fmt.h / g;
-
-      const parts = [
-        { text: `この画像を${fmt.w}×${fmt.h}ピクセル（${fmt.label}）用にリサイズ・再構成してください。
-
-【重要ルール】
-・元画像のデザイン要素（テキスト、画像、色使い、ブランド要素）は全て維持してください。
-・新しいアスペクト比（${ratioW}:${ratioH}）に合わせて、レイアウトを最適に再配置してください。
-・テキストの内容は一字一句変えないでください。
-・余白の追加や要素の配置変更で、新しいサイズに自然にフィットさせてください。
-・画像は1枚だけ出力してください。` },
-        { inlineData: { mimeType: srcEntry.sourceMimeType, data: srcEntry.sourceImage } }
-      ];
-
       try {
-        const data = await callGeminiAPIWithRetry(parts, 2);
-        const resized = await resizeImageToPixels(data.imageBase64, data.mimeType, fmt.w, fmt.h);
+        const resized = await canvasResize(srcEntry.sourceImage, srcEntry.sourceMimeType, fmt.w, fmt.h);
         fmt.status = 'success';
         fmt.imageBase64 = resized.base64;
         fmt.mimeType = resized.mimeType;
@@ -1859,10 +1899,6 @@ document.getElementById('btn-resize-start').addEventListener('click', async () =
       $progressBar.style.width = pct + '%';
       $statusText.textContent = `変換中... (${completedJobs}/${totalJobs})`;
       if (State.currentView === 'resize') renderResizeView();
-
-      if (completedJobs < totalJobs) {
-        await new Promise(r => setTimeout(r, 1500));
-      }
     }
   }
 
