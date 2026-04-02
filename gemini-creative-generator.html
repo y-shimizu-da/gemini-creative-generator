@@ -470,11 +470,6 @@ select option{background:var(--bg-input)}
   <div class="section">
     <div class="section-label">設定</div>
     <div class="config-row">
-      <label>同時生成数</label>
-      <input type="range" id="parallel-count" min="1" max="10" value="5">
-      <span class="range-val" id="parallel-val">5</span>
-    </div>
-    <div class="config-row">
       <label>モデル</label>
       <select id="model-select">
         <option value="gemini-2.5-flash-image">2.5 Flash Image</option>
@@ -882,8 +877,6 @@ const $uploadZone = document.getElementById('upload-zone');
 const $fileInput = document.getElementById('file-input');
 const $previewImages = document.getElementById('preview-images');
 const $prompt = document.getElementById('prompt');
-const $parallelCount = document.getElementById('parallel-count');
-const $parallelVal = document.getElementById('parallel-val');
 const $aspectRatio = document.getElementById('aspect-ratio');
 const $btnGenerate = document.getElementById('btn-generate');
 const $btnContinue = document.getElementById('btn-continue');
@@ -904,8 +897,6 @@ const $tempVal = document.getElementById('temp-val');
 
 // ===== Init =====
 $apiKey.value = State.apiKey;
-$parallelCount.value = State.parallelCount;
-$parallelVal.textContent = State.parallelCount;
 $aspectRatio.value = State.aspectRatio;
 
 // ===== User name =====
@@ -935,13 +926,6 @@ $apiKey.addEventListener('input', () => {
 });
 $keyToggle.addEventListener('click', () => {
   $apiKey.type = $apiKey.type === 'password' ? 'text' : 'password';
-});
-
-// ===== Parallel count =====
-$parallelCount.addEventListener('input', () => {
-  State.parallelCount = parseInt($parallelCount.value);
-  $parallelVal.textContent = State.parallelCount;
-  localStorage.setItem('gemini-parallel-count', State.parallelCount);
 });
 
 // ===== Aspect ratio =====
@@ -1322,19 +1306,23 @@ function renderPatternPanels() {
     countWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;';
     const countLabel = document.createElement('span');
     countLabel.textContent = '生成枚数:';
-    const countInput = document.createElement('input');
-    countInput.type = 'number';
-    countInput.min = '1';
-    countInput.max = '10';
-    countInput.value = ps.count;
-    countInput.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:3px 6px;font-size:.8rem;text-align:center;';
-    countInput.addEventListener('change', () => {
-      ps.count = Math.max(1, Math.min(10, parseInt(countInput.value) || 1));
-      countInput.value = ps.count;
+    const countSlider = document.createElement('input');
+    countSlider.type = 'range';
+    countSlider.min = '1';
+    countSlider.max = '10';
+    countSlider.value = ps.count;
+    countSlider.style.cssText = 'width:80px;accent-color:#E94560;';
+    const countVal = document.createElement('span');
+    countVal.textContent = ps.count;
+    countVal.style.cssText = 'min-width:18px;text-align:center;font-weight:600;color:#E94560;';
+    countSlider.addEventListener('input', () => {
+      ps.count = parseInt(countSlider.value);
+      countVal.textContent = ps.count;
       updatePatternTotal();
     });
     countWrap.appendChild(countLabel);
-    countWrap.appendChild(countInput);
+    countWrap.appendChild(countSlider);
+    countWrap.appendChild(countVal);
 
     header.appendChild(title);
     header.appendChild(countWrap);
