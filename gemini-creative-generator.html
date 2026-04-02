@@ -454,18 +454,12 @@ select option{background:var(--bg-input)}
 
   <div class="section">
     <div class="section-label">プロンプトパターン選択</div>
-    <div style="font-size:.7rem;color:#aaa;margin-bottom:6px">使用するテンプレートパターンを選択してください。複数選択可。</div>
+    <div style="font-size:.7rem;color:#aaa;margin-bottom:6px">使用するパターンを選択すると、編集可能なプロンプト欄が表示されます。複数選択可。</div>
     <div id="pattern-checkboxes" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
     <div id="pattern-panels"></div>
   </div>
-
-  <div class="section">
-    <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
-      プロンプト
-      <button id="btn-template" class="btn btn-outline" style="padding:3px 8px;font-size:.7rem">テンプレを挿入</button>
-    </div>
-    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;上のパターン選択後「テンプレを挿入」で反映できます"></textarea>
-  </div>
+  <!-- hidden prompt for State.prompt sync -->
+  <textarea id="prompt" style="display:none"></textarea>
 
   <div class="section">
     <div class="section-label">設定</div>
@@ -1189,9 +1183,6 @@ function resizeImageToPixels(base64, mimeType, targetW, targetH) {
   });
 }
 
-// ===== Prompt =====
-$prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
-
 // ===== Prompt Patterns =====
 const PROMPT_PATTERNS = [
   {
@@ -1261,20 +1252,33 @@ const PROMPT_PATTERNS = [
   }
 ];
 
-// Pattern selection state
+// Pattern selection state: tracks checkbox, edited prompt text, and image count
 const patternState = {
-  selected: {},   // { patternId: true/false }
-  imageCounts: {} // { patternId: number }
+  selected: {},    // { patternId: true/false }
+  imageCounts: {}, // { patternId: number }
+  editedPrompts: {} // { patternId: string } - user-edited prompt content
 };
+
+// Sync all selected pattern prompts into State.prompt (used by generation)
+function syncPromptState() {
+  const parts = [];
+  PROMPT_PATTERNS.forEach(pat => {
+    if (!patternState.selected[pat.id]) return;
+    const text = (patternState.editedPrompts[pat.id] || '').trim();
+    if (!text) return;
+    const count = patternState.imageCounts[pat.id] || 3;
+    parts.push(`【${pat.name}】（生成枚数: ${count}枚）\n\n${text}`);
+  });
+  const combined = parts.join('\n\n' + '='.repeat(40) + '\n\n');
+  $prompt.value = combined;
+  State.prompt = combined;
+}
 
 function renderPatternUI() {
   const checkboxContainer = document.getElementById('pattern-checkboxes');
-  const panelContainer = document.getElementById('pattern-panels');
   checkboxContainer.innerHTML = '';
-  panelContainer.innerHTML = '';
 
   PROMPT_PATTERNS.forEach(pat => {
-    // Checkbox row
     const row = document.createElement('label');
     row.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem;';
     const cb = document.createElement('input');
@@ -1282,10 +1286,12 @@ function renderPatternUI() {
     cb.checked = !!patternState.selected[pat.id];
     cb.addEventListener('change', () => {
       patternState.selected[pat.id] = cb.checked;
-      if (cb.checked && !patternState.imageCounts[pat.id]) {
-        patternState.imageCounts[pat.id] = 3;
+      if (cb.checked) {
+        if (!patternState.imageCounts[pat.id]) patternState.imageCounts[pat.id] = 3;
+        if (!patternState.editedPrompts[pat.id]) patternState.editedPrompts[pat.id] = pat.prompt.trim();
       }
       renderPatternPanels();
+      syncPromptState();
     });
     const nameSpan = document.createElement('span');
     nameSpan.textContent = pat.name;
@@ -1312,12 +1318,12 @@ function renderPatternPanels() {
     const panel = document.createElement('div');
     panel.style.cssText = 'border:1px solid #333;border-radius:8px;padding:10px;margin-bottom:10px;background:#1a1a2e;';
 
-    // Header with name and image count
+    // Header: name + image count
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
 
     const title = document.createElement('span');
-    title.textContent = `📋 ${pat.name}`;
+    title.textContent = pat.name;
     title.style.cssText = 'font-weight:600;font-size:.85rem;';
 
     const countWrap = document.createElement('div');
@@ -1332,6 +1338,7 @@ function renderPatternPanels() {
     countInput.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:2px 6px;font-size:.8rem;text-align:center;';
     countInput.addEventListener('change', () => {
       patternState.imageCounts[pat.id] = parseInt(countInput.value) || 3;
+      syncPromptState();
     });
     countWrap.appendChild(countLabel);
     countWrap.appendChild(countInput);
@@ -1340,52 +1347,40 @@ function renderPatternPanels() {
     header.appendChild(countWrap);
     panel.appendChild(header);
 
-    // Prompt display (collapsible)
-    const toggle = document.createElement('button');
-    toggle.textContent = 'プロンプト内容を表示 ▼';
-    toggle.style.cssText = 'background:none;border:1px solid #444;border-radius:4px;color:#aaa;padding:3px 8px;font-size:.7rem;cursor:pointer;margin-bottom:6px;';
-    const promptArea = document.createElement('pre');
-    promptArea.textContent = pat.prompt.trim();
-    promptArea.style.cssText = 'background:#0d1117;border:1px solid #333;border-radius:4px;padding:8px;font-size:.7rem;color:#ccc;white-space:pre-wrap;word-wrap:break-word;max-height:200px;overflow-y:auto;display:none;';
-    toggle.addEventListener('click', () => {
-      const visible = promptArea.style.display !== 'none';
-      promptArea.style.display = visible ? 'none' : 'block';
-      toggle.textContent = visible ? 'プロンプト内容を表示 ▼' : 'プロンプト内容を隠す ▲';
+    // Editable prompt textarea
+    const promptLabel = document.createElement('div');
+    promptLabel.textContent = 'プロンプト（自由に編集可能）';
+    promptLabel.style.cssText = 'font-size:.7rem;color:#aaa;margin-bottom:4px;';
+    panel.appendChild(promptLabel);
+
+    const ta = document.createElement('textarea');
+    ta.value = patternState.editedPrompts[pat.id] || pat.prompt.trim();
+    ta.style.cssText = 'width:100%;min-height:180px;background:#0d1117;border:1px solid #333;border-radius:4px;padding:8px;font-size:.75rem;color:#ccc;resize:vertical;box-sizing:border-box;font-family:inherit;line-height:1.5;';
+    ta.addEventListener('input', () => {
+      patternState.editedPrompts[pat.id] = ta.value;
+      syncPromptState();
     });
-    panel.appendChild(toggle);
-    panel.appendChild(promptArea);
+    panel.appendChild(ta);
+
+    // Reset button
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'テンプレートに戻す';
+    resetBtn.style.cssText = 'background:none;border:1px solid #444;border-radius:4px;color:#888;padding:3px 8px;font-size:.65rem;cursor:pointer;margin-top:4px;';
+    resetBtn.addEventListener('click', () => {
+      if (confirm(`「${pat.name}」のプロンプトをテンプレートの初期状態に戻しますか？`)) {
+        patternState.editedPrompts[pat.id] = pat.prompt.trim();
+        ta.value = pat.prompt.trim();
+        syncPromptState();
+        showToast('テンプレートに戻しました', 'info');
+      }
+    });
+    panel.appendChild(resetBtn);
 
     panelContainer.appendChild(panel);
   });
 }
 
 renderPatternUI();
-
-// Template insert button: combine selected patterns into prompt
-document.getElementById('btn-template').addEventListener('click', () => {
-  const selectedPatterns = PROMPT_PATTERNS.filter(p => patternState.selected[p.id]);
-  if (selectedPatterns.length === 0) {
-    showToast('パターンを選択してください', 'info');
-    return;
-  }
-  if ($prompt.value.trim() && !confirm('現在のプロンプトを上書きしますか？')) return;
-
-  let combined = '';
-  selectedPatterns.forEach((pat, i) => {
-    const count = patternState.imageCounts[pat.id] || 3;
-    if (selectedPatterns.length > 1) {
-      combined += `${'='.repeat(40)}\n`;
-      combined += `【${pat.name}】（生成枚数: ${count}枚）\n`;
-      combined += `${'='.repeat(40)}\n\n`;
-    }
-    combined += pat.prompt.trim() + '\n\n';
-  });
-
-  $prompt.value = combined.trim();
-  State.prompt = $prompt.value;
-  $prompt.focus();
-  showToast(`${selectedPatterns.length}件のテンプレートを挿入しました`, 'info');
-});
 
 // ===== Toast =====
 function showToast(msg, type = 'info') {
