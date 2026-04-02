@@ -453,13 +453,15 @@ select option{background:var(--bg-input)}
   </div>
 
   <div class="section">
-    <div class="section-label">プロンプトパターン選択</div>
-    <div style="font-size:.7rem;color:#aaa;margin-bottom:6px">使用するパターンを選択すると、編集可能なプロンプト欄が表示されます。複数選択可。</div>
-    <div id="pattern-checkboxes" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
-    <div id="pattern-panels"></div>
+    <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+      プロンプト
+      <div style="position:relative;display:inline-block" id="template-dropdown-wrap">
+        <button id="btn-template" class="btn btn-outline" style="padding:3px 8px;font-size:.7rem">テンプレを挿入 ▼</button>
+        <div id="template-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;min-width:200px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5)"></div>
+      </div>
+    </div>
+    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;「テンプレを挿入」からパターンを選択できます"></textarea>
   </div>
-  <!-- hidden prompt for State.prompt sync -->
-  <textarea id="prompt" style="display:none"></textarea>
 
   <div class="section">
     <div class="section-label">設定</div>
@@ -1183,12 +1185,14 @@ function resizeImageToPixels(base64, mimeType, targetW, targetH) {
   });
 }
 
-// ===== Prompt Patterns =====
+// ===== Prompt & Template Dropdown =====
+$prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
+
 const PROMPT_PATTERNS = [
   {
     id: 'standard',
     name: 'スタンダード',
-    description: '汎用的な広告クリエイティブ生成テンプレート。あらゆる商材に対応。',
+    description: '汎用的な広告クリエイティブ生成テンプレート',
     prompt: `＃依頼
 クリエイティブのコピーは変えず、デザインや構成を変えてクリエイティブを生成したい
 1枚目：デザインA
@@ -1210,7 +1214,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'skincare',
     name: 'スキンケア特化',
-    description: 'スキンケア・美容商材に最適化。肌悩みを持つ30代後半〜40代後半女性向け。',
+    description: 'スキンケア・美容商材に最適化',
     prompt: `# 依頼：スキンケア商材のマーケティング戦略に基づくクリエイティブ生成
 提供する記事LPとリサーチ情報を読み込み、ユーザーの「肌悩み」と「理想の肌状態」を深く理解した上で、以下の3パターンのデザイン構成案を作成してください。
 
@@ -1252,135 +1256,60 @@ const PROMPT_PATTERNS = [
   }
 ];
 
-// Pattern selection state: tracks checkbox, edited prompt text, and image count
-const patternState = {
-  selected: {},    // { patternId: true/false }
-  imageCounts: {}, // { patternId: number }
-  editedPrompts: {} // { patternId: string } - user-edited prompt content
-};
+// Dropdown toggle
+const $btnTemplate = document.getElementById('btn-template');
+const $dropdown = document.getElementById('template-dropdown');
 
-// Sync all selected pattern prompts into State.prompt (used by generation)
-function syncPromptState() {
-  const parts = [];
+$btnTemplate.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const isOpen = $dropdown.style.display !== 'none';
+  $dropdown.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) buildDropdown();
+});
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('template-dropdown-wrap').contains(e.target)) {
+    $dropdown.style.display = 'none';
+  }
+});
+
+function buildDropdown() {
+  $dropdown.innerHTML = '';
   PROMPT_PATTERNS.forEach(pat => {
-    if (!patternState.selected[pat.id]) return;
-    const text = (patternState.editedPrompts[pat.id] || '').trim();
-    if (!text) return;
-    const count = patternState.imageCounts[pat.id] || 3;
-    parts.push(`【${pat.name}】（生成枚数: ${count}枚）\n\n${text}`);
-  });
-  const combined = parts.join('\n\n' + '='.repeat(40) + '\n\n');
-  $prompt.value = combined;
-  State.prompt = combined;
-}
+    const item = document.createElement('div');
+    item.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid #333;transition:background .15s;';
+    item.addEventListener('mouseenter', () => { item.style.background = '#2a2a4e'; });
+    item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
 
-function renderPatternUI() {
-  const checkboxContainer = document.getElementById('pattern-checkboxes');
-  checkboxContainer.innerHTML = '';
+    const name = document.createElement('div');
+    name.textContent = pat.name;
+    name.style.cssText = 'font-weight:600;font-size:.8rem;margin-bottom:2px;';
 
-  PROMPT_PATTERNS.forEach(pat => {
-    const row = document.createElement('label');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem;';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = !!patternState.selected[pat.id];
-    cb.addEventListener('change', () => {
-      patternState.selected[pat.id] = cb.checked;
-      if (cb.checked) {
-        if (!patternState.imageCounts[pat.id]) patternState.imageCounts[pat.id] = 3;
-        if (!patternState.editedPrompts[pat.id]) patternState.editedPrompts[pat.id] = pat.prompt.trim();
+    const desc = document.createElement('div');
+    desc.textContent = pat.description;
+    desc.style.cssText = 'font-size:.65rem;color:#888;';
+
+    item.appendChild(name);
+    item.appendChild(desc);
+
+    item.addEventListener('click', () => {
+      if ($prompt.value.trim() && !confirm('現在のプロンプトを上書きしますか？')) {
+        $dropdown.style.display = 'none';
+        return;
       }
-      renderPatternPanels();
-      syncPromptState();
+      $prompt.value = pat.prompt.trim();
+      State.prompt = $prompt.value;
+      $prompt.focus();
+      $dropdown.style.display = 'none';
+      showToast(`「${pat.name}」テンプレートを挿入しました`, 'info');
     });
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = pat.name;
-    nameSpan.style.fontWeight = '600';
-    const descSpan = document.createElement('span');
-    descSpan.textContent = pat.description;
-    descSpan.style.cssText = 'font-size:.7rem;color:#888;margin-left:4px;';
-    row.appendChild(cb);
-    row.appendChild(nameSpan);
-    row.appendChild(descSpan);
-    checkboxContainer.appendChild(row);
+
+    $dropdown.appendChild(item);
   });
-
-  renderPatternPanels();
+  // Remove border from last item
+  if ($dropdown.lastChild) $dropdown.lastChild.style.borderBottom = 'none';
 }
-
-function renderPatternPanels() {
-  const panelContainer = document.getElementById('pattern-panels');
-  panelContainer.innerHTML = '';
-
-  PROMPT_PATTERNS.forEach(pat => {
-    if (!patternState.selected[pat.id]) return;
-
-    const panel = document.createElement('div');
-    panel.style.cssText = 'border:1px solid #333;border-radius:8px;padding:10px;margin-bottom:10px;background:#1a1a2e;';
-
-    // Header: name + image count
-    const header = document.createElement('div');
-    header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
-
-    const title = document.createElement('span');
-    title.textContent = pat.name;
-    title.style.cssText = 'font-weight:600;font-size:.85rem;';
-
-    const countWrap = document.createElement('div');
-    countWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;';
-    const countLabel = document.createElement('span');
-    countLabel.textContent = '生成枚数:';
-    const countInput = document.createElement('input');
-    countInput.type = 'number';
-    countInput.min = '1';
-    countInput.max = '10';
-    countInput.value = patternState.imageCounts[pat.id] || 3;
-    countInput.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:2px 6px;font-size:.8rem;text-align:center;';
-    countInput.addEventListener('change', () => {
-      patternState.imageCounts[pat.id] = parseInt(countInput.value) || 3;
-      syncPromptState();
-    });
-    countWrap.appendChild(countLabel);
-    countWrap.appendChild(countInput);
-
-    header.appendChild(title);
-    header.appendChild(countWrap);
-    panel.appendChild(header);
-
-    // Editable prompt textarea
-    const promptLabel = document.createElement('div');
-    promptLabel.textContent = 'プロンプト（自由に編集可能）';
-    promptLabel.style.cssText = 'font-size:.7rem;color:#aaa;margin-bottom:4px;';
-    panel.appendChild(promptLabel);
-
-    const ta = document.createElement('textarea');
-    ta.value = patternState.editedPrompts[pat.id] || pat.prompt.trim();
-    ta.style.cssText = 'width:100%;min-height:180px;background:#0d1117;border:1px solid #333;border-radius:4px;padding:8px;font-size:.75rem;color:#ccc;resize:vertical;box-sizing:border-box;font-family:inherit;line-height:1.5;';
-    ta.addEventListener('input', () => {
-      patternState.editedPrompts[pat.id] = ta.value;
-      syncPromptState();
-    });
-    panel.appendChild(ta);
-
-    // Reset button
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'テンプレートに戻す';
-    resetBtn.style.cssText = 'background:none;border:1px solid #444;border-radius:4px;color:#888;padding:3px 8px;font-size:.65rem;cursor:pointer;margin-top:4px;';
-    resetBtn.addEventListener('click', () => {
-      if (confirm(`「${pat.name}」のプロンプトをテンプレートの初期状態に戻しますか？`)) {
-        patternState.editedPrompts[pat.id] = pat.prompt.trim();
-        ta.value = pat.prompt.trim();
-        syncPromptState();
-        showToast('テンプレートに戻しました', 'info');
-      }
-    });
-    panel.appendChild(resetBtn);
-
-    panelContainer.appendChild(panel);
-  });
-}
-
-renderPatternUI();
 
 // ===== Toast =====
 function showToast(msg, type = 'info') {
