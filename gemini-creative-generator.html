@@ -464,6 +464,13 @@ select option{background:var(--bg-input)}
   </div>
 
   <div class="section">
+    <div class="section-label">パターン別 生成枚数</div>
+    <div style="font-size:.7rem;color:#aaa;margin-bottom:6px">パターンごとに生成する枚数を指定できます。0枚のパターンはスキップされます。</div>
+    <div id="pattern-counts"></div>
+    <div id="pattern-total" style="font-size:.75rem;color:#ccc;margin-top:6px"></div>
+  </div>
+
+  <div class="section">
     <div class="section-label">設定</div>
     <div class="config-row">
       <label>同時生成数</label>
@@ -1256,7 +1263,74 @@ const PROMPT_PATTERNS = [
   }
 ];
 
-// Dropdown toggle
+// ===== Pattern-based generation counts =====
+const patternCounts = {};
+PROMPT_PATTERNS.forEach(p => { patternCounts[p.id] = 0; });
+
+function renderPatternCounts() {
+  const container = document.getElementById('pattern-counts');
+  container.innerHTML = '';
+  PROMPT_PATTERNS.forEach(pat => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #222;';
+
+    const label = document.createElement('span');
+    label.textContent = pat.name;
+    label.style.cssText = 'font-size:.8rem;font-weight:600;';
+
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '10';
+    input.value = patternCounts[pat.id];
+    input.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:3px 6px;font-size:.8rem;text-align:center;';
+    input.addEventListener('change', () => {
+      patternCounts[pat.id] = Math.max(0, Math.min(10, parseInt(input.value) || 0));
+      input.value = patternCounts[pat.id];
+      updatePatternTotal();
+    });
+
+    const unit = document.createElement('span');
+    unit.textContent = '枚';
+    unit.style.cssText = 'font-size:.75rem;color:#888;';
+
+    right.appendChild(input);
+    right.appendChild(unit);
+    row.appendChild(label);
+    row.appendChild(right);
+    container.appendChild(row);
+  });
+  updatePatternTotal();
+}
+
+function updatePatternTotal() {
+  const total = Object.values(patternCounts).reduce((a, b) => a + b, 0);
+  document.getElementById('pattern-total').textContent = total > 0
+    ? `合計: ${total}枚（${total}回のAPI呼び出し）`
+    : '※ パターン別枚数が0の場合、プロンプト欄の内容で「同時生成数」分だけ生成します';
+}
+
+// Build the generation schedule: [{prompt, count}]
+function getGenerationSchedule() {
+  const schedule = [];
+  const total = Object.values(patternCounts).reduce((a, b) => a + b, 0);
+  if (total > 0) {
+    PROMPT_PATTERNS.forEach(pat => {
+      const count = patternCounts[pat.id];
+      if (count > 0) {
+        schedule.push({ patternName: pat.name, prompt: pat.prompt.trim(), count });
+      }
+    });
+  }
+  return schedule;
+}
+
+renderPatternCounts();
+
+// ===== Template Dropdown =====
 const $btnTemplate = document.getElementById('btn-template');
 const $dropdown = document.getElementById('template-dropdown');
 
@@ -1267,7 +1341,6 @@ $btnTemplate.addEventListener('click', (e) => {
   if (!isOpen) buildDropdown();
 });
 
-// Close dropdown on outside click
 document.addEventListener('click', (e) => {
   if (!document.getElementById('template-dropdown-wrap').contains(e.target)) {
     $dropdown.style.display = 'none';
@@ -1307,7 +1380,6 @@ function buildDropdown() {
 
     $dropdown.appendChild(item);
   });
-  // Remove border from last item
   if ($dropdown.lastChild) $dropdown.lastChild.style.borderBottom = 'none';
 }
 
@@ -1381,8 +1453,27 @@ async function callGeminiAPI(parts) {
 // ===== Generation =====
 async function runGeneration(contextImages = [], rejectedImages = []) {
   if (!State.apiKey) { showToast('APIキーを入力してください', 'error'); return; }
-  if (!State.prompt.trim() && State.referenceImages.length === 0) {
+
+  // Determine generation mode: pattern-based or prompt-based
+  const schedule = getGenerationSchedule();
+  const totalFromPatterns = schedule.reduce((a, s) => a + s.count, 0);
+  const usePatternMode = totalFromPatterns > 0;
+
+  if (!usePatternMode && !State.prompt.trim() && State.referenceImages.length === 0) {
     showToast('プロンプトまたは参考画像を設定してください', 'error'); return;
+  }
+
+  const totalCount = usePatternMode ? totalFromPatterns : State.parallelCount;
+
+  // Build per-slot prompt assignment for pattern mode
+  // e.g. [{prompt: "...", patternName: "スタンダード"}, ...] one entry per image
+  const slotAssignments = [];
+  if (usePatternMode) {
+    schedule.forEach(s => {
+      for (let i = 0; i < s.count; i++) {
+        slotAssignments.push({ prompt: s.prompt, patternName: s.patternName });
+      }
+    });
   }
 
   State.generating = true;
@@ -1390,16 +1481,18 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
   updateButtons();
   sendLog('generate_start', {
     roundNumber: State.rounds.length,
-    parallelCount: State.parallelCount,
+    parallelCount: totalCount,
     refImageCount: State.referenceImages.length,
     productImageCount: State.productImages.length,
     logoImageCount: State.logoImages.length,
+    patternMode: usePatternMode,
+    schedule: usePatternMode ? schedule.map(s => ({ name: s.patternName, count: s.count })) : null,
   });
 
   const roundIndex = State.rounds.length;
   const round = {
     id: roundIndex + 1,
-    results: Array.from({ length: State.parallelCount }, (_, i) => ({
+    results: Array.from({ length: totalCount }, (_, i) => ({
       id: `r${roundIndex}-${i}`,
       status: 'loading',
       imageBase64: null,
@@ -1407,13 +1500,14 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
       selection: 'none',
       errorMessage: null,
       text: '',
+      patternName: usePatternMode ? slotAssignments[i].patternName : '',
     })),
   };
   State.rounds.push(round);
   State.currentRound = roundIndex;
   renderRoundTabs();
   renderGrid();
-  setStatus('active', `生成中... (0/${State.parallelCount} 完了)`);
+  setStatus('active', `生成中... (0/${totalCount} 完了)`);
 
   // Style variations to ensure diverse outputs
   // Style variations - mostly single-image, a few multi-panel allowed
@@ -1443,8 +1537,10 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
   // Build per-call parts with unique style variation
   function buildPartsForCall(index) {
     const callParts = [];
-    if (State.prompt.trim()) {
-      let promptText = State.prompt.trim();
+    // Use pattern-specific prompt if in pattern mode, otherwise use the prompt textarea
+    const basePrompt = usePatternMode ? slotAssignments[index].prompt : State.prompt.trim();
+    if (basePrompt) {
+      let promptText = basePrompt;
       if (contextImages.length > 0) {
         promptText += '\n\nこれらの「良い例」の画像のテイストを参考にしつつ、新しいバリエーションを生成してください。';
       }
@@ -1564,7 +1660,7 @@ ${variation}
           })
           .finally(() => {
             completed++;
-            setStatus('active', `生成中... (${completed}/${State.parallelCount} 完了)`);
+            setStatus('active', `生成中... (${completed}/${totalCount} 完了)`);
             if (State.currentRound === roundIndex) renderGrid();
           })
       );
