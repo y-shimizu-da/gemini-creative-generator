@@ -453,11 +453,18 @@ select option{background:var(--bg-input)}
   </div>
 
   <div class="section">
+    <div class="section-label">プロンプトパターン選択</div>
+    <div style="font-size:.7rem;color:#aaa;margin-bottom:6px">使用するテンプレートパターンを選択してください。複数選択可。</div>
+    <div id="pattern-checkboxes" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+    <div id="pattern-panels"></div>
+  </div>
+
+  <div class="section">
     <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
       プロンプト
       <button id="btn-template" class="btn btn-outline" style="padding:3px 8px;font-size:.7rem">テンプレを挿入</button>
     </div>
-    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;「テンプレを挿入」ボタンで参考例を挿入できます"></textarea>
+    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;上のパターン選択後「テンプレを挿入」で反映できます"></textarea>
   </div>
 
   <div class="section">
@@ -1185,7 +1192,13 @@ function resizeImageToPixels(base64, mimeType, targetW, targetH) {
 // ===== Prompt =====
 $prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
 
-const PROMPT_TEMPLATE = `＃依頼
+// ===== Prompt Patterns =====
+const PROMPT_PATTERNS = [
+  {
+    id: 'standard',
+    name: 'スタンダード',
+    description: '汎用的な広告クリエイティブ生成テンプレート。あらゆる商材に対応。',
+    prompt: `＃依頼
 クリエイティブのコピーは変えず、デザインや構成を変えてクリエイティブを生成したい
 1枚目：デザインA
 2枚目：デザインB
@@ -1201,14 +1214,177 @@ const PROMPT_TEMPLATE = `＃依頼
 ・
 
 #以下に記事LPの本文やリサーチ情報を記載
-`;
+`
+  },
+  {
+    id: 'skincare',
+    name: 'スキンケア特化',
+    description: 'スキンケア・美容商材に最適化。肌悩みを持つ30代後半〜40代後半女性向け。',
+    prompt: `# 依頼：スキンケア商材のマーケティング戦略に基づくクリエイティブ生成
+提供する記事LPとリサーチ情報を読み込み、ユーザーの「肌悩み」と「理想の肌状態」を深く理解した上で、以下の3パターンのデザイン構成案を作成してください。
 
+---
+
+# 1. 前提情報（マーケティング文脈）
+■ターゲット
+30代後半～40代後半の女性。幼い頃から赤ら顔に悩んでおり、年齢を重ねるにつれてファンデーションでも隠しきれなくなってきた。子どもを出産してからは肌が敏感になり、季節の変わり目には赤みや乾燥が悪化することもある。
+
+すっぴんの自分の顔を見たり、仕事中にふと鏡に映った姿を目にすると「思っていた以上に赤い」とショックを受ける。人から「お酒飲んでる？」などと誤解されることもあり、日常の中でなんとなくストレスを感じている。
+
+皮膚科にも一度通ったが、またぶり返してしまい、「どうにかしてましにできる方法はないのか」と思いながら、日常のスキンケアで改善できる方法を探している。市販のプチプラ化粧水も試してみたが、しみたり乾燥が改善されず、「やはり安価なものでは解決できないのかもしれない」と考えている。
+
+# 2. 成果の良いコピー
+・
+・
+・
+・
+
+---
+
+# 3. デザインバリエーション（スキンケア特化）
+
+### ■ 1枚目：デザインA【テクスチャー・成分訴求型】
+コンセプト: 「効きそう」という期待感を醸成する、高品質なサイエンス・クリーンデザイン。
+ビジュアル: 美容液の滴、みずみずしいテクスチャーのアップ、または成分の浸透をイメージさせるクリスタルな背景。
+トーン: 白、透明感、ライトブルー、またはブランドカラーを基調とした清潔感。
+狙い: 商品の品質への信頼と、高機能なイメージの定着。
+
+### ■ 2枚目：デザインB【肌実感・ビフォーアフターのニュアンス型】
+コンセプト: 悩みが解決した後の「充足感」を自分事化させるデザイン。
+ビジュアル: 鏡を見て微笑む女性のアップ（特に肌のツヤを強調）。「悩み（暗い色調）」と「解決（明るい色調）」を画面分割で表現。
+トーン:自然光を感じる温かいライティング。健康的で血色の良いトーン。
+狙い: 使用後の自分を想像させ、購買意欲（ベネフィット）を刺激する。
+
+### ■ 3枚目：デザインC【参考画像踏襲】
+参考画像で送っている画像を参考にブラッシュアップして作成してください
+`
+  }
+];
+
+// Pattern selection state
+const patternState = {
+  selected: {},   // { patternId: true/false }
+  imageCounts: {} // { patternId: number }
+};
+
+function renderPatternUI() {
+  const checkboxContainer = document.getElementById('pattern-checkboxes');
+  const panelContainer = document.getElementById('pattern-panels');
+  checkboxContainer.innerHTML = '';
+  panelContainer.innerHTML = '';
+
+  PROMPT_PATTERNS.forEach(pat => {
+    // Checkbox row
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.85rem;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!patternState.selected[pat.id];
+    cb.addEventListener('change', () => {
+      patternState.selected[pat.id] = cb.checked;
+      if (cb.checked && !patternState.imageCounts[pat.id]) {
+        patternState.imageCounts[pat.id] = 3;
+      }
+      renderPatternPanels();
+    });
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = pat.name;
+    nameSpan.style.fontWeight = '600';
+    const descSpan = document.createElement('span');
+    descSpan.textContent = pat.description;
+    descSpan.style.cssText = 'font-size:.7rem;color:#888;margin-left:4px;';
+    row.appendChild(cb);
+    row.appendChild(nameSpan);
+    row.appendChild(descSpan);
+    checkboxContainer.appendChild(row);
+  });
+
+  renderPatternPanels();
+}
+
+function renderPatternPanels() {
+  const panelContainer = document.getElementById('pattern-panels');
+  panelContainer.innerHTML = '';
+
+  PROMPT_PATTERNS.forEach(pat => {
+    if (!patternState.selected[pat.id]) return;
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'border:1px solid #333;border-radius:8px;padding:10px;margin-bottom:10px;background:#1a1a2e;';
+
+    // Header with name and image count
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+
+    const title = document.createElement('span');
+    title.textContent = `📋 ${pat.name}`;
+    title.style.cssText = 'font-weight:600;font-size:.85rem;';
+
+    const countWrap = document.createElement('div');
+    countWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;';
+    const countLabel = document.createElement('span');
+    countLabel.textContent = '生成枚数:';
+    const countInput = document.createElement('input');
+    countInput.type = 'number';
+    countInput.min = '1';
+    countInput.max = '10';
+    countInput.value = patternState.imageCounts[pat.id] || 3;
+    countInput.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:2px 6px;font-size:.8rem;text-align:center;';
+    countInput.addEventListener('change', () => {
+      patternState.imageCounts[pat.id] = parseInt(countInput.value) || 3;
+    });
+    countWrap.appendChild(countLabel);
+    countWrap.appendChild(countInput);
+
+    header.appendChild(title);
+    header.appendChild(countWrap);
+    panel.appendChild(header);
+
+    // Prompt display (collapsible)
+    const toggle = document.createElement('button');
+    toggle.textContent = 'プロンプト内容を表示 ▼';
+    toggle.style.cssText = 'background:none;border:1px solid #444;border-radius:4px;color:#aaa;padding:3px 8px;font-size:.7rem;cursor:pointer;margin-bottom:6px;';
+    const promptArea = document.createElement('pre');
+    promptArea.textContent = pat.prompt.trim();
+    promptArea.style.cssText = 'background:#0d1117;border:1px solid #333;border-radius:4px;padding:8px;font-size:.7rem;color:#ccc;white-space:pre-wrap;word-wrap:break-word;max-height:200px;overflow-y:auto;display:none;';
+    toggle.addEventListener('click', () => {
+      const visible = promptArea.style.display !== 'none';
+      promptArea.style.display = visible ? 'none' : 'block';
+      toggle.textContent = visible ? 'プロンプト内容を表示 ▼' : 'プロンプト内容を隠す ▲';
+    });
+    panel.appendChild(toggle);
+    panel.appendChild(promptArea);
+
+    panelContainer.appendChild(panel);
+  });
+}
+
+renderPatternUI();
+
+// Template insert button: combine selected patterns into prompt
 document.getElementById('btn-template').addEventListener('click', () => {
+  const selectedPatterns = PROMPT_PATTERNS.filter(p => patternState.selected[p.id]);
+  if (selectedPatterns.length === 0) {
+    showToast('パターンを選択してください', 'info');
+    return;
+  }
   if ($prompt.value.trim() && !confirm('現在のプロンプトを上書きしますか？')) return;
-  $prompt.value = PROMPT_TEMPLATE;
-  State.prompt = PROMPT_TEMPLATE;
+
+  let combined = '';
+  selectedPatterns.forEach((pat, i) => {
+    const count = patternState.imageCounts[pat.id] || 3;
+    if (selectedPatterns.length > 1) {
+      combined += `${'='.repeat(40)}\n`;
+      combined += `【${pat.name}】（生成枚数: ${count}枚）\n`;
+      combined += `${'='.repeat(40)}\n\n`;
+    }
+    combined += pat.prompt.trim() + '\n\n';
+  });
+
+  $prompt.value = combined.trim();
+  State.prompt = $prompt.value;
   $prompt.focus();
-  showToast('テンプレートを挿入しました', 'info');
+  showToast(`${selectedPatterns.length}件のテンプレートを挿入しました`, 'info');
 });
 
 // ===== Toast =====
