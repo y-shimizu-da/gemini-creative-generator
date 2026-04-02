@@ -457,18 +457,15 @@ select option{background:var(--bg-input)}
       プロンプト
       <div style="position:relative;display:inline-block" id="template-dropdown-wrap">
         <button id="btn-template" class="btn btn-outline" style="padding:3px 8px;font-size:.7rem">テンプレを挿入 ▼</button>
-        <div id="template-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;min-width:200px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5)"></div>
+        <div id="template-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;min-width:220px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5)"></div>
       </div>
     </div>
-    <textarea id="prompt" placeholder="クリエイティブ生成の指示を入力...&#10;「テンプレを挿入」からパターンを選択できます"></textarea>
-  </div>
-
-  <div class="section">
-    <div class="section-label">パターン別 生成枚数</div>
-    <div style="font-size:.7rem;color:#aaa;margin-bottom:6px">パターンごとに生成する枚数を指定できます。0枚のパターンはスキップされます。</div>
-    <div id="pattern-counts"></div>
+    <div id="pattern-panels"></div>
     <div id="pattern-total" style="font-size:.75rem;color:#ccc;margin-top:6px"></div>
+    <div id="no-pattern-msg" style="font-size:.75rem;color:#666;padding:8px 0">「テンプレを挿入」からパターンを選択してください</div>
   </div>
+  <!-- hidden prompt for backward compat -->
+  <textarea id="prompt" style="display:none"></textarea>
 
   <div class="section">
     <div class="section-label">設定</div>
@@ -1192,9 +1189,7 @@ function resizeImageToPixels(base64, mimeType, targetW, targetH) {
   });
 }
 
-// ===== Prompt & Template Dropdown =====
-$prompt.addEventListener('input', () => { State.prompt = $prompt.value; });
-
+// ===== Prompt Patterns =====
 const PROMPT_PATTERNS = [
   {
     id: 'standard',
@@ -1263,74 +1258,120 @@ const PROMPT_PATTERNS = [
   }
 ];
 
-// ===== Pattern-based generation counts =====
-const patternCounts = {};
-PROMPT_PATTERNS.forEach(p => { patternCounts[p.id] = 0; });
+// ===== Pattern state =====
+const patternState = {};
+PROMPT_PATTERNS.forEach(p => {
+  patternState[p.id] = { checked: false, count: 3, editedPrompt: '' };
+});
 
-function renderPatternCounts() {
-  const container = document.getElementById('pattern-counts');
-  container.innerHTML = '';
-  PROMPT_PATTERNS.forEach(pat => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #222;';
-
-    const label = document.createElement('span');
-    label.textContent = pat.name;
-    label.style.cssText = 'font-size:.8rem;font-weight:600;';
-
-    const right = document.createElement('div');
-    right.style.cssText = 'display:flex;align-items:center;gap:8px;';
-
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '0';
-    input.max = '10';
-    input.value = patternCounts[pat.id];
-    input.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:3px 6px;font-size:.8rem;text-align:center;';
-    input.addEventListener('change', () => {
-      patternCounts[pat.id] = Math.max(0, Math.min(10, parseInt(input.value) || 0));
-      input.value = patternCounts[pat.id];
-      updatePatternTotal();
-    });
-
-    const unit = document.createElement('span');
-    unit.textContent = '枚';
-    unit.style.cssText = 'font-size:.75rem;color:#888;';
-
-    right.appendChild(input);
-    right.appendChild(unit);
-    row.appendChild(label);
-    row.appendChild(right);
-    container.appendChild(row);
-  });
-  updatePatternTotal();
-}
-
-function updatePatternTotal() {
-  const total = Object.values(patternCounts).reduce((a, b) => a + b, 0);
-  document.getElementById('pattern-total').textContent = total > 0
-    ? `合計: ${total}枚（${total}回のAPI呼び出し）`
-    : '※ パターン別枚数が0の場合、プロンプト欄の内容で「同時生成数」分だけ生成します';
-}
-
-// Build the generation schedule: [{prompt, count}]
 function getGenerationSchedule() {
   const schedule = [];
-  const total = Object.values(patternCounts).reduce((a, b) => a + b, 0);
-  if (total > 0) {
-    PROMPT_PATTERNS.forEach(pat => {
-      const count = patternCounts[pat.id];
-      if (count > 0) {
-        schedule.push({ patternName: pat.name, prompt: pat.prompt.trim(), count });
-      }
-    });
-  }
+  PROMPT_PATTERNS.forEach(pat => {
+    const ps = patternState[pat.id];
+    if (ps.checked && ps.count > 0) {
+      schedule.push({
+        patternName: pat.name,
+        prompt: (ps.editedPrompt || pat.prompt).trim(),
+        count: ps.count,
+      });
+    }
+  });
   return schedule;
 }
 
-renderPatternCounts();
+function updatePatternTotal() {
+  const schedule = getGenerationSchedule();
+  const total = schedule.reduce((a, s) => a + s.count, 0);
+  const $total = document.getElementById('pattern-total');
+  const $noMsg = document.getElementById('no-pattern-msg');
+  if (total > 0) {
+    const detail = schedule.map(s => `${s.patternName}: ${s.count}枚`).join(' + ');
+    $total.textContent = `合計: ${total}枚のAPI呼び出し（${detail}）`;
+    $total.style.display = '';
+    $noMsg.style.display = 'none';
+  } else {
+    $total.style.display = 'none';
+    const anyChecked = PROMPT_PATTERNS.some(p => patternState[p.id].checked);
+    $noMsg.style.display = anyChecked ? 'none' : '';
+  }
+  // Sync hidden prompt for backward compat
+  State.prompt = schedule.map(s => s.prompt).join('\n\n');
+  $prompt.value = State.prompt;
+}
 
-// ===== Template Dropdown =====
+function renderPatternPanels() {
+  const container = document.getElementById('pattern-panels');
+  container.innerHTML = '';
+
+  PROMPT_PATTERNS.forEach(pat => {
+    const ps = patternState[pat.id];
+    if (!ps.checked) return;
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'border:1px solid #333;border-radius:8px;padding:10px;margin-bottom:10px;background:#1a1a2e;';
+
+    // Header: name + count
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+
+    const title = document.createElement('span');
+    title.textContent = pat.name;
+    title.style.cssText = 'font-weight:600;font-size:.85rem;';
+
+    const countWrap = document.createElement('div');
+    countWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;';
+    const countLabel = document.createElement('span');
+    countLabel.textContent = '生成枚数:';
+    const countInput = document.createElement('input');
+    countInput.type = 'number';
+    countInput.min = '1';
+    countInput.max = '10';
+    countInput.value = ps.count;
+    countInput.style.cssText = 'width:50px;background:#0d1117;border:1px solid #444;border-radius:4px;color:#fff;padding:3px 6px;font-size:.8rem;text-align:center;';
+    countInput.addEventListener('change', () => {
+      ps.count = Math.max(1, Math.min(10, parseInt(countInput.value) || 1));
+      countInput.value = ps.count;
+      updatePatternTotal();
+    });
+    countWrap.appendChild(countLabel);
+    countWrap.appendChild(countInput);
+
+    header.appendChild(title);
+    header.appendChild(countWrap);
+    panel.appendChild(header);
+
+    // Editable prompt
+    const ta = document.createElement('textarea');
+    ta.value = ps.editedPrompt || pat.prompt.trim();
+    ta.style.cssText = 'width:100%;min-height:150px;background:#0d1117;border:1px solid #333;border-radius:4px;padding:8px;font-size:.75rem;color:#ccc;resize:vertical;box-sizing:border-box;font-family:inherit;line-height:1.5;';
+    ta.addEventListener('input', () => {
+      ps.editedPrompt = ta.value;
+      updatePatternTotal();
+    });
+    panel.appendChild(ta);
+
+    // Reset button
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'テンプレートに戻す';
+    resetBtn.style.cssText = 'background:none;border:1px solid #444;border-radius:4px;color:#888;padding:3px 8px;font-size:.65rem;cursor:pointer;margin-top:4px;';
+    resetBtn.addEventListener('click', () => {
+      ps.editedPrompt = pat.prompt.trim();
+      ta.value = ps.editedPrompt;
+      updatePatternTotal();
+      showToast('テンプレートに戻しました', 'info');
+    });
+    panel.appendChild(resetBtn);
+
+    container.appendChild(panel);
+  });
+
+  updatePatternTotal();
+}
+
+// Initial render
+renderPatternPanels();
+
+// ===== Template Dropdown (checkbox style) =====
 const $btnTemplate = document.getElementById('btn-template');
 const $dropdown = document.getElementById('template-dropdown');
 
@@ -1350,34 +1391,38 @@ document.addEventListener('click', (e) => {
 function buildDropdown() {
   $dropdown.innerHTML = '';
   PROMPT_PATTERNS.forEach(pat => {
-    const item = document.createElement('div');
-    item.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid #333;transition:background .15s;';
+    const ps = patternState[pat.id];
+
+    const item = document.createElement('label');
+    item.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:10px 14px;cursor:pointer;border-bottom:1px solid #333;transition:background .15s;';
     item.addEventListener('mouseenter', () => { item.style.background = '#2a2a4e'; });
     item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
 
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = ps.checked;
+    cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      ps.checked = cb.checked;
+      if (ps.checked && !ps.editedPrompt) {
+        ps.editedPrompt = pat.prompt.trim();
+      }
+      renderPatternPanels();
+    });
+
+    const textWrap = document.createElement('div');
     const name = document.createElement('div');
     name.textContent = pat.name;
     name.style.cssText = 'font-weight:600;font-size:.8rem;margin-bottom:2px;';
-
     const desc = document.createElement('div');
     desc.textContent = pat.description;
     desc.style.cssText = 'font-size:.65rem;color:#888;';
+    textWrap.appendChild(name);
+    textWrap.appendChild(desc);
 
-    item.appendChild(name);
-    item.appendChild(desc);
-
-    item.addEventListener('click', () => {
-      if ($prompt.value.trim() && !confirm('現在のプロンプトを上書きしますか？')) {
-        $dropdown.style.display = 'none';
-        return;
-      }
-      $prompt.value = pat.prompt.trim();
-      State.prompt = $prompt.value;
-      $prompt.focus();
-      $dropdown.style.display = 'none';
-      showToast(`「${pat.name}」テンプレートを挿入しました`, 'info');
-    });
-
+    item.appendChild(cb);
+    item.appendChild(textWrap);
     $dropdown.appendChild(item);
   });
   if ($dropdown.lastChild) $dropdown.lastChild.style.borderBottom = 'none';
