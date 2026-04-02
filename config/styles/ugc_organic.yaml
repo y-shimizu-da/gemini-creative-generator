@@ -1,0 +1,23 @@
+name: "UGCオーガニック"
+description: "ユーザー生成コンテンツ風の自然なスタイル。親近感と信頼性を演出。CTR4倍のUGC効果。"
+background_style: >
+  Authentic lifestyle scene that feels like a real customer's photo, NOT a professional shoot.
+  Lighting: natural daylight, golden hour warmth, soft shadows from a window.
+  Setting: real-world environment (cozy home interior, sunny cafe table,
+  morning kitchen counter, outdoor terrace).
+  Camera quality: high-end smartphone (iPhone 15 Pro quality), not DSLR.
+  Composition: slightly off-center, candid framing, genuine product-in-use scenario.
+  Details: natural shadows on surfaces, real textures (wood grain, fabric, ceramic),
+  slight warm color cast. A coffee cup or plant in the background for context.
+  Post-processing: minimal, warm tone, no HDR effect, no over-sharpening.
+mood_keywords: >
+  Warm, approachable, "friend-recommended" trustworthiness.
+  The feeling of discovering a great product through a friend's Instagram story.
+  Genuine, unfiltered, relatable everyday moments, cozy comfort.
+color_guidance: >
+  Warm earth tones: beige, cream, warm wood, terracotta accents.
+  Natural greens from plants. Soft golden highlights from sunlight.
+  Avoid: neon colors, pure black, overly saturated tones, studio-perfect white.
+font_size_headline: 56
+font_size_subheadline: 30
+font_size_cta: 30

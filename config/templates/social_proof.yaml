@@ -1,0 +1,15 @@
+name: "ソーシャルプルーフ"
+description: "数字・実績ベースの信頼性訴求。中央にヘッドライン、下部中央にCTA。"
+text_position: "center"
+headline_area:
+  x: 100
+  y: 400
+  width: 880
+  height: 160
+cta_area:
+  x: 380
+  y: 870
+  width: 320
+  height: 80
+logo_position: "top_right"
+copy_style: "social_proof"

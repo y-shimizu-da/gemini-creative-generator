@@ -1,0 +1,27 @@
+name: "ラグジュアリー"
+description: "高級ブランド・プレミアム商品向け。ゴールドアクセント、深いジュエルトーン、優雅な余白。"
+background_style: >
+  Ultra-premium luxury aesthetic with refined simplicity.
+  Setting: exclusive high-end environment suggesting wealth and taste
+  (marble surface, dark velvet fabric, brushed gold accents, crystal reflections).
+  Lighting: warm, soft, flattering. Key light from upper left creating
+  gentle shadows that add dimension. Subtle rim light for product definition.
+  Surface: premium materials visible (marble, silk, brushed metal, leather).
+  Composition: centered with ample negative space, rule of thirds,
+  impeccable balance and symmetry.
+  Post-processing: warm color grading, gentle contrast lift,
+  subtle vignette for focus, timeless and never trendy.
+  Reference: Chanel, Dior, Cartier advertising photography.
+mood_keywords: >
+  Exclusive opulence, timeless elegance, aspirational desire.
+  The feeling of stepping into a luxury boutique on Avenue Montaigne.
+  Sophisticated, refined, coveted, understated power.
+color_guidance: >
+  Deep jewel tones: emerald green, sapphire blue, burgundy wine, amethyst purple.
+  Gold and champagne accents for warmth and luxury signaling.
+  Dark backgrounds (deep navy #0A1628, rich black #1A1A1A) with bright metallic highlights.
+  Minimal palette: maximum 2 colors plus gold.
+  Avoid: bright neons, casual colors, anything that feels mass-market.
+font_size_headline: 60
+font_size_subheadline: 32
+font_size_cta: 32

@@ -1,0 +1,23 @@
+name: "ボールド・ミニマル"
+description: "大胆なタイポグラフィとクリーンな背景。高コントラストで視認性最大。Apple的ミニマリズム。"
+background_style: >
+  Ultra-clean studio background with premium minimalist aesthetic.
+  Professional 3-point lighting: large diffused softbox as key light from upper left,
+  subtle fill from right, clean white seamless backdrop.
+  Smooth linear gradient from pure white to very light gray (#F5F5F5),
+  creating subtle depth without distraction.
+  Surface: clean matte finish, no textures, no patterns.
+  Single product focus area with ample breathing room.
+  Reference: Apple product photography, luxury cosmetics advertising.
+mood_keywords: >
+  Premium sophistication, confident luxury, whisper-quiet elegance.
+  The feeling of a high-end boutique: curated, intentional, flawless.
+  Clean lines, purposeful negative space, architectural precision.
+color_guidance: >
+  Dominant: white (#FFFFFF) and light gray (#F0F0F0).
+  Product accent: allow the product's natural colors to be the only contrast.
+  Avoid: warm tones, multiple colors, pastels.
+  Aim for 90%+ contrast ratio between background and any foreground elements.
+font_size_headline: 72
+font_size_subheadline: 36
+font_size_cta: 34

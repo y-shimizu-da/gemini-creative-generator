@@ -1,0 +1,15 @@
+name: "顧客証言"
+description: "リアルな体験談・レビュー風レイアウト。中央にコメント、下部にCTA。UGC広告に最適。"
+text_position: "center"
+headline_area:
+  x: 80
+  y: 380
+  width: 920
+  height: 200
+cta_area:
+  x: 350
+  y: 870
+  width: 380
+  height: 80
+logo_position: "top_right"
+copy_style: "testimonial"

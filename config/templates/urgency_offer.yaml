@@ -1,0 +1,15 @@
+name: "緊急オファー"
+description: "期間限定・割引訴求。上部にヘッドライン、中央にCTA。"
+text_position: "top"
+headline_area:
+  x: 50
+  y: 60
+  width: 980
+  height: 200
+cta_area:
+  x: 300
+  y: 500
+  width: 480
+  height: 90
+logo_position: "top_left"
+copy_style: "urgency_offer"

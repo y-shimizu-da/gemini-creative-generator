@@ -1,0 +1,15 @@
+name: "ベネフィット訴求"
+description: "問題提起→解決策の構成。上部にヘッドライン、下部左にCTA。"
+text_position: "top"
+headline_area:
+  x: 50
+  y: 50
+  width: 980
+  height: 160
+cta_area:
+  x: 50
+  y: 870
+  width: 320
+  height: 80
+logo_position: "top_left"
+copy_style: "benefit_highlight"

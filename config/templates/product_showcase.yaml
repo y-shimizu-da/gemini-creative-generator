@@ -1,0 +1,15 @@
+name: "商品ショーケース"
+description: "商品の魅力をダイレクトに伝える定番レイアウト。下部にヘッドライン、右上にロゴ。"
+text_position: "bottom"
+headline_area:
+  x: 50
+  y: 700
+  width: 980
+  height: 160
+cta_area:
+  x: 380
+  y: 870
+  width: 320
+  height: 80
+logo_position: "top_right"
+copy_style: "product_showcase"

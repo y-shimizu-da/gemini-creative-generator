@@ -1,0 +1,49 @@
+name: "スタンダード"
+description: "汎用的な広告コピー・レイアウトパターン。あらゆる商材に対応します。"
+
+copy_style_prompts:
+  product_showcase: |
+    【ダイレクト商品訴求】スタイルで生成してください。
+    構成: 商品名 + 主要ベネフィット + 裏付け（数字/実績）
+    例ヘッドライン: 「美肌革命」「至福の一杯」「神コスパ」
+    例サブヘッドライン: 「医学誌掲載の独自成分配合」「プロが認めた本格派」
+    トーン: 確信的、プレミアム感、一目で価値が伝わる
+  benefit_highlight: |
+    【PAS（問題→扇動→解決）】フレームワークで生成してください。
+    構成: ヘッドラインで痛点指摘 → サブヘッドラインで解決策提示
+    例ヘッドライン: 「まだ悩んでる？」「時間の無駄です」「それ、間違いかも」
+    例サブヘッドライン: 「たった10分で解決する方法」
+    トーン: 共感的→希望を与える。ターゲットの日常シーンを想起させる
+  social_proof: |
+    【社会的証明・権威性】重視スタイルで生成してください。
+    構成: 具体的な数字（実績・ユーザー数・満足度） + 権威の裏付け
+    例ヘッドライン: 「12,847人が選んだ」「満足度96.3%」「3冠達成」
+    例サブヘッドライン: 「専門家も推薦する実力派」
+    数字は端数まで具体的に（「約1万人」より「12,847人」が信頼性3倍）
+    トーン: 客観的、データに基づく信頼感
+  urgency_offer: |
+    【緊急性＆希少性】訴求スタイルで生成してください。
+    構成: 割引/特典 + 期限/残数 + 強いアクションCTA
+    例ヘッドライン: 「本日限定50%OFF」「残り3個」「今だけ無料」
+    例サブヘッドライン: 「このページを閉じたら二度とこの価格では買えません」
+    トーン: エネルギッシュ、見逃す恐怖（FOMO）を刺激
+  testimonial: |
+    【顧客証言・UGC風】スタイルで生成してください。
+    構成: リアルな使用者の声（年代・属性付き） + Before/After + 推薦
+    例ヘッドライン: 「人生変わった」「もう手放せない」「もっと早く知りたかった」
+    例サブヘッドライン: 「30代営業職・売上3倍達成」
+    トーン: 素朴で等身大、リアルな体験談風。広告っぽさを排除
+
+layout_prompts:
+  product_showcase: |
+    Product-centered hero layout. Place the product prominently in the center or center-right area, occupying about 40-50% of the canvas. Headline text top-left or top-center. CTA button bottom-center.
+  benefit_highlight: |
+    Split layout: left side for bold text message, right side for the product/visual. Headline large and dominant on the left half. CTA button at the bottom-left area.
+  social_proof: |
+    Trust-building layout. Product at center with a review/testimonial quote overlay. Star rating or number badge prominently displayed. Headline at top, CTA at bottom-center.
+  urgency_offer: |
+    Urgency-driven layout. Big bold discount/offer number in the center. Product slightly smaller, positioned to the side. Headline at top with urgency cue (timer/badge). CTA button large and prominent at bottom.
+  testimonial: |
+    UGC/testimonial layout. Large quotation-style text in the center. Product image smaller, in a corner or bottom area. Natural, editorial design—like a magazine review. CTA subtle at the bottom.
+  minimal_premium: |
+    Ultra-minimal premium layout. Maximum negative space (60%+ empty/clean). Product centered with one line of text below it. CTA as a simple text link, not a heavy button. Apple-style elegance.

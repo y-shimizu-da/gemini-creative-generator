@@ -1,0 +1,25 @@
+name: "ヴィブラント・モダン"
+description: "2026年トレンドの高彩度カラー。エネルギッシュで目を引くデザイン。Gen-Z/ミレニアル向け。"
+background_style: >
+  High-energy 2026 trend visual with bold saturated color blocking.
+  Composition: asymmetric overlapping geometric shapes (circles, diagonal stripes,
+  floating rounded rectangles) creating layered depth.
+  Gradients: electric complementary color transitions (coral #FF6B6B to cyan #00D2FF,
+  magenta #FF00FF to lime #00FF87, sunset orange to deep purple).
+  Movement: diagonal lines suggesting motion, floating 3D elements with shadows.
+  Depth: layered shapes at different z-levels with subtle drop shadows between them.
+  Style: contemporary digital art meets editorial design,
+  bold and unapologetic use of color. Memphis design influence.
+mood_keywords: >
+  Youthful explosive energy, innovation, trend-forward excitement.
+  The feeling of discovering something new and exciting on social media.
+  Bold, rebellious, cutting-edge, playful confidence.
+color_guidance: >
+  Primary: bright saturated colors that clash with Facebook's blue UI
+  (coral, electric orange, hot pink, lime green).
+  Complementary pairs: orange + electric blue, magenta + lime.
+  Mandatory high contrast between elements.
+  Avoid: pastels, muted tones, corporate blues, earth tones.
+font_size_headline: 68
+font_size_subheadline: 34
+font_size_cta: 34

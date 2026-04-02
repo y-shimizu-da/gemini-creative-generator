@@ -1,0 +1,25 @@
+name: "エンタープライズ"
+description: "B2B・法人向け。信頼感・実績感を演出。SaaS、コンサルティング、業務ツール向け。"
+background_style: >
+  Professional corporate aesthetic for B2B advertising.
+  Setting: modern office environment or abstract professional backdrop.
+  Clean geometric lines, subtle data visualization elements
+  (faint grid patterns, abstract chart shapes, circuit-like lines).
+  Lighting: cool, even, professional. Clean and bright with no dramatic shadows.
+  Surface: matte finish, modern desk surface or abstract gradient.
+  Composition: organized, structured, grid-aligned elements suggesting
+  order and reliability. Subtle technology motifs.
+  Reference: Salesforce, Microsoft, Slack enterprise advertising.
+mood_keywords: >
+  Trustworthy authority, results-driven professionalism, reliable innovation.
+  The feeling of a well-run organization where every decision is data-backed.
+  Confident, credible, forward-thinking, enterprise-grade quality.
+color_guidance: >
+  Corporate blue (#0066CC to #003399) as primary.
+  White and light gray for clean backgrounds.
+  Accent: teal (#00B4D8) or green (#00C853) for growth/success signals.
+  High contrast between text and background for maximum readability.
+  Avoid: playful colors, warm tones, anything that feels consumer/casual.
+font_size_headline: 64
+font_size_subheadline: 32
+font_size_cta: 32
