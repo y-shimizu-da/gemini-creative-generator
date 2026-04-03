@@ -462,10 +462,15 @@ select option{background:var(--bg-input)}
     </div>
     <div id="pattern-panels"></div>
     <div id="pattern-total" style="font-size:.75rem;color:#ccc;margin-top:6px"></div>
-    <div id="no-pattern-msg" style="font-size:.75rem;color:#666;padding:8px 0">「テンプレを挿入」からパターンを選択してください</div>
+    <div id="direct-prompt-wrap">
+      <textarea id="prompt" placeholder="ここにプロンプトを直接入力できます。テンプレを挿入すると、テンプレート編集モードに切り替わります。" style="min-height:150px;width:100%;box-sizing:border-box"></textarea>
+      <div id="direct-count-wrap" style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:.75rem;color:#ccc">
+        <span>生成枚数:</span>
+        <input type="range" id="direct-parallel-count" min="1" max="10" value="5" style="width:100px;accent-color:#4361ee">
+        <span id="direct-parallel-val" style="min-width:18px;text-align:center;font-weight:600;color:var(--accent-blue)">5</span>
+      </div>
+    </div>
   </div>
-  <!-- hidden prompt for backward compat -->
-  <textarea id="prompt" style="display:none"></textarea>
 
   <div class="section">
     <div class="section-label">設定</div>
@@ -880,6 +885,19 @@ const $uploadZone = document.getElementById('upload-zone');
 const $fileInput = document.getElementById('file-input');
 const $previewImages = document.getElementById('preview-images');
 const $prompt = document.getElementById('prompt');
+$prompt.addEventListener('input', () => {
+  State.prompt = $prompt.value;
+});
+// Direct mode parallel count slider
+const $directParallel = document.getElementById('direct-parallel-count');
+const $directParallelVal = document.getElementById('direct-parallel-val');
+$directParallel.value = State.parallelCount;
+$directParallelVal.textContent = State.parallelCount;
+$directParallel.addEventListener('input', () => {
+  State.parallelCount = parseInt($directParallel.value);
+  $directParallelVal.textContent = State.parallelCount;
+  localStorage.setItem('gemini-parallel-count', State.parallelCount);
+});
 const $aspectRatio = document.getElementById('aspect-ratio');
 const $btnGenerate = document.getElementById('btn-generate');
 const $btnContinue = document.getElementById('btn-continue');
@@ -1266,20 +1284,21 @@ function updatePatternTotal() {
   const schedule = getGenerationSchedule();
   const total = schedule.reduce((a, s) => a + s.count, 0);
   const $total = document.getElementById('pattern-total');
-  const $noMsg = document.getElementById('no-pattern-msg');
+  const $directWrap = document.getElementById('direct-prompt-wrap');
+
   if (total > 0) {
     const detail = schedule.map(s => `${s.patternName}: ${s.count}枚`).join(' + ');
     $total.textContent = `合計: ${total}枚のAPI呼び出し（${detail}）`;
     $total.style.display = '';
-    $noMsg.style.display = 'none';
+    $directWrap.style.display = 'none';
+    // Sync prompt from patterns
+    State.prompt = schedule.map(s => s.prompt).join('\n\n');
+    $prompt.value = State.prompt;
   } else {
     $total.style.display = 'none';
-    const anyChecked = PROMPT_PATTERNS.some(p => patternState[p.id].checked);
-    $noMsg.style.display = anyChecked ? 'none' : '';
+    // Show direct prompt input when no pattern is selected
+    $directWrap.style.display = '';
   }
-  // Sync hidden prompt for backward compat
-  State.prompt = schedule.map(s => s.prompt).join('\n\n');
-  $prompt.value = State.prompt;
 }
 
 function renderPatternPanels() {
