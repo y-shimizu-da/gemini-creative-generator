@@ -553,7 +553,10 @@ select option{background:var(--bg-input)}
     <div id="history-body">
       <div id="history-list"></div>
       <div id="history-detail" style="display:none">
-        <button class="btn btn-outline" id="btn-history-back" style="margin-bottom:12px;font-size:.8rem">← 一覧に戻る</button>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <button class="btn btn-outline" id="btn-history-back" style="font-size:.8rem">← 一覧に戻る</button>
+          <button class="btn" id="btn-history-load" style="font-size:.8rem;background:var(--accent-blue);margin-left:auto">📥 この生成を読み込んで編集を続ける</button>
+        </div>
         <div id="history-detail-info"></div>
         <div id="history-detail-grid"></div>
       </div>
@@ -2557,6 +2560,7 @@ function escapeHtml(str) {
 const $historyModal = document.getElementById('history-modal');
 const $historyList = document.getElementById('history-list');
 const $historyDetail = document.getElementById('history-detail');
+let currentDetailSession = null;
 
 document.getElementById('btn-history').addEventListener('click', () => openHistoryModal());
 $historyModal.querySelector('.modal-overlay').addEventListener('click', () => { $historyModal.style.display = 'none'; });
@@ -2565,6 +2569,55 @@ document.getElementById('btn-history-back').addEventListener('click', () => {
   $historyDetail.style.display = 'none';
   $historyList.style.display = 'flex';
 });
+
+// Load history session into main grid for continued editing
+document.getElementById('btn-history-load').addEventListener('click', () => {
+  if (!currentDetailSession) return;
+  if (State.rounds.length > 0 && !confirm('現在の生成結果を破棄して、履歴を読み込みますか？')) return;
+  loadSessionIntoState(currentDetailSession);
+});
+
+function loadSessionIntoState(session) {
+  // Reset current state
+  State.rounds = [];
+  State.currentRound = -1;
+  State.resizeResults = [];
+  State.currentView = 'round';
+
+  // Restore prompt if available
+  if (session.prompt) {
+    State.prompt = session.prompt;
+    const $prompt = document.getElementById('prompt');
+    if ($prompt) $prompt.value = session.prompt;
+  }
+
+  // Build round from session images
+  const results = session.images.map((img, i) => ({
+    id: `hist-${session.id}-${i}`,
+    status: 'success',
+    imageBase64: img.imageBase64,
+    mimeType: img.mimeType,
+    selection: img.selection || 'none',
+    errorMessage: null,
+    text: '',
+  }));
+
+  const round = { id: 1, results };
+  State.rounds.push(round);
+  State.currentRound = 0;
+
+  // Track this as the current history session so edits save back to it
+  currentHistoryId = session.id || null;
+
+  // Close modal and update UI
+  $historyModal.style.display = 'none';
+  renderRoundTabs();
+  renderGrid();
+  updateSelectionCount();
+  updateButtons();
+  setStatus('idle', `履歴から${results.length}枚を読み込みました`);
+  showToast(`履歴から${results.length}枚を読み込みました`, 'success');
+}
 
 async function openHistoryModal() {
   $historyModal.style.display = 'flex';
@@ -2629,6 +2682,7 @@ async function openHistoryModal() {
 }
 
 function showHistoryDetail(session) {
+  currentDetailSession = session;
   $historyList.style.display = 'none';
   $historyDetail.style.display = 'block';
 
