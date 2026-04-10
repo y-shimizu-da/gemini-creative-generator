@@ -24,9 +24,43 @@ from src.models import (
     TextArea,
     TextPosition,
 )
+from PIL import Image
+
 from src.output import write_all_outputs
 from src.pipeline import PatternSelection, Pipeline, PipelineConfig
 from src.reference_analyzer import get_full_analysis
+
+
+def _resize_images(
+    results: list,
+    sizes: list[tuple[int, int]],
+    run_dir: Path,
+) -> dict[str, list[str]]:
+    """Resize successful images to additional sizes.
+
+    Returns a mapping of original image path to list of resized image paths.
+    """
+    resized_map: dict[str, list[str]] = {}
+    for size in sizes:
+        w, h = size
+        size_dir = run_dir / "images" / f"{w}x{h}"
+        size_dir.mkdir(parents=True, exist_ok=True)
+
+        for r in results:
+            if r.status.value != "success" or not r.image_path:
+                continue
+            src_path = Path(r.image_path)
+            if not src_path.exists():
+                continue
+
+            dst_path = size_dir / src_path.name
+            img = Image.open(src_path)
+            img_resized = img.resize((w, h), Image.LANCZOS)
+            img_resized.save(str(dst_path), "JPEG", quality=95)
+
+            resized_map.setdefault(r.image_path, []).append(str(dst_path))
+
+    return resized_map
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -51,6 +85,10 @@ if "generation_results" not in st.session_state:
     st.session_state.generation_results = None
 if "run_dir" not in st.session_state:
     st.session_state.run_dir = None
+if "resized_map" not in st.session_state:
+    st.session_state.resized_map = {}
+if "resize_sizes" not in st.session_state:
+    st.session_state.resize_sizes = []
 
 # 参考クリエイティブ保存ディレクトリ
 Path("assets/references").mkdir(parents=True, exist_ok=True)
@@ -387,6 +425,26 @@ with tab_settings:
         )
         st.caption("各クリエイティブはAIが完成形を一発生成します（テキスト・レイアウト・商品画像統合済み）")
 
+    # ----- リサイズ設定 -----
+    st.divider()
+    st.subheader("リサイズ出力")
+    st.markdown("生成画像（1080×1080）を追加サイズにリサイズして出力します。必要なサイズにチェックを入れてください。")
+
+    RESIZE_OPTIONS: list[tuple[int, int]] = [
+        (120, 60),
+        (320, 50),
+        (468, 60),
+        (250, 250),
+        (300, 250),
+    ]
+
+    selected_resize_sizes: list[tuple[int, int]] = []
+    resize_cols = st.columns(len(RESIZE_OPTIONS))
+    for idx, (w, h) in enumerate(RESIZE_OPTIONS):
+        with resize_cols[idx]:
+            if st.checkbox(f"{w}×{h}", key=f"resize_{w}x{h}"):
+                selected_resize_sizes.append((w, h))
+
 
 # ======================= TAB 4: GENERATE =======================
 
@@ -478,8 +536,16 @@ with tab_generate:
         # Write output files
         write_all_outputs(results, pipeline.run_dir, pipeline.run_id)
 
+        # Resize if sizes selected
+        resized_map: dict[str, list[str]] = {}
+        if selected_resize_sizes:
+            with st.spinner("リサイズ中..."):
+                resized_map = _resize_images(results, selected_resize_sizes, pipeline.run_dir)
+
         st.session_state.generation_results = results
         st.session_state.run_dir = str(pipeline.run_dir)
+        st.session_state.resized_map = resized_map
+        st.session_state.resize_sizes = selected_resize_sizes
 
         # Summary
         success_count = sum(1 for r in results if r.status.value == "success")
@@ -545,18 +611,48 @@ with tab_preview:
                             f"CTA: {r.spec.copy.cta_text}"
                         )
 
+            # ----- Resized images preview -----
+            resized_map = st.session_state.resized_map
+            resize_sizes = st.session_state.resize_sizes
+            if resized_map and resize_sizes:
+                st.divider()
+                st.subheader("リサイズ画像")
+                for w, h in resize_sizes:
+                    with st.expander(f"{w}×{h}", expanded=False):
+                        r_cols_per_row = min(6, max(3, 1080 // max(w, 1)))
+                        r_items = []
+                        for r in filtered:
+                            if r.image_path and r.image_path in resized_map:
+                                for rp in resized_map[r.image_path]:
+                                    if f"{w}x{h}" in rp:
+                                        r_items.append((r, rp))
+                        for row_start in range(0, len(r_items), r_cols_per_row):
+                            r_cols = st.columns(r_cols_per_row)
+                            for col_idx, (r, rp) in enumerate(r_items[row_start:row_start + r_cols_per_row]):
+                                with r_cols[col_idx]:
+                                    if Path(rp).exists():
+                                        st.image(rp, use_container_width=True)
+                                    st.caption(r.spec.copy.headline[:30])
+
             # Download section
             st.divider()
             dc1, dc2, dc3 = st.columns(3)
 
-            # ZIP download
+            # ZIP download (includes resized images)
             with dc1:
                 if st.button("画像を一括ダウンロード (ZIP)", use_container_width=True):
                     zip_buffer = io.BytesIO()
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
                         for r in filtered:
                             if r.image_path and Path(r.image_path).exists():
-                                zf.write(r.image_path, Path(r.image_path).name)
+                                zf.write(r.image_path, f"1080x1080/{Path(r.image_path).name}")
+                                # Include resized versions
+                                if resized_map and r.image_path in resized_map:
+                                    for rp in resized_map[r.image_path]:
+                                        rp_path = Path(rp)
+                                        if rp_path.exists():
+                                            size_folder = rp_path.parent.name
+                                            zf.write(rp, f"{size_folder}/{rp_path.name}")
                     st.download_button(
                         "ZIPをダウンロード",
                         data=zip_buffer.getvalue(),
