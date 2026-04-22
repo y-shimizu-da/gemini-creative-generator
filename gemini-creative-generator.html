@@ -412,10 +412,28 @@ select option{background:var(--bg-input)}
   </div>
 
   <div class="section">
+    <div class="section-label">プロバイダー</div>
+    <div style="display:flex;gap:8px">
+      <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 10px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem">
+        <input type="radio" name="provider" value="gemini" checked style="accent-color:var(--accent-blue)">
+        Gemini
+      </label>
+      <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 10px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);font-size:.85rem">
+        <input type="radio" name="provider" value="openai" style="accent-color:var(--accent-blue)">
+        OpenAI (GPT-Image-2)
+      </label>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-label">APIキー</div>
-    <div class="key-row">
+    <div class="key-row" id="gemini-key-row">
       <input type="password" id="api-key" placeholder="Gemini APIキーを入力">
       <button id="key-toggle" title="表示/非表示">👁</button>
+    </div>
+    <div class="key-row" id="openai-key-row" style="display:none;margin-top:6px">
+      <input type="password" id="openai-api-key" placeholder="OpenAI APIキーを入力 (sk-...)">
+      <button id="openai-key-toggle" title="表示/非表示">👁</button>
     </div>
   </div>
 
@@ -474,12 +492,28 @@ select option{background:var(--bg-input)}
 
   <div class="section">
     <div class="section-label">設定</div>
-    <div class="config-row">
+    <div class="config-row" id="row-gemini-model">
       <label>モデル</label>
       <select id="model-select">
         <option value="gemini-2.5-flash-image">2.5 Flash Image</option>
         <option value="gemini-3.1-flash-image-preview">3.1 Flash Image (NanoBanana2)</option>
         <option value="gemini-3-pro-image-preview">3 Pro Image</option>
+      </select>
+    </div>
+    <div class="config-row" id="row-openai-model" style="display:none">
+      <label>モデル</label>
+      <select id="openai-model-select">
+        <option value="gpt-image-2">gpt-image-2</option>
+        <option value="gpt-image-1">gpt-image-1</option>
+      </select>
+    </div>
+    <div class="config-row" id="row-openai-quality" style="display:none">
+      <label>品質</label>
+      <select id="openai-quality">
+        <option value="auto">auto</option>
+        <option value="high">high</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
       </select>
     </div>
     <div class="config-row">
@@ -730,6 +764,10 @@ select option{background:var(--bg-input)}
 // ===== State =====
 const State = {
   apiKey: localStorage.getItem('gemini-api-key') || '',
+  openaiApiKey: localStorage.getItem('openai-api-key') || '',
+  provider: localStorage.getItem('image-provider') || 'gemini', // 'gemini' | 'openai'
+  openaiModel: localStorage.getItem('openai-model') || 'gpt-image-2',
+  openaiQuality: localStorage.getItem('openai-quality') || 'auto',
   referenceImages: [], // [{name, base64, mimeType}]
   productImages: [],   // [{name, base64, mimeType}]
   logoImages: [],      // [{name, base64, mimeType}]
@@ -953,6 +991,58 @@ $apiKey.addEventListener('input', () => {
 $keyToggle.addEventListener('click', () => {
   $apiKey.type = $apiKey.type === 'password' ? 'text' : 'password';
 });
+
+// ===== Provider & OpenAI =====
+const $openaiApiKey = document.getElementById('openai-api-key');
+const $openaiKeyToggle = document.getElementById('openai-key-toggle');
+const $geminiKeyRow = document.getElementById('gemini-key-row');
+const $openaiKeyRow = document.getElementById('openai-key-row');
+const $rowGeminiModel = document.getElementById('row-gemini-model');
+const $rowOpenaiModel = document.getElementById('row-openai-model');
+const $rowOpenaiQuality = document.getElementById('row-openai-quality');
+const $openaiModelSelect = document.getElementById('openai-model-select');
+const $openaiQuality = document.getElementById('openai-quality');
+
+$openaiApiKey.value = State.openaiApiKey;
+$openaiModelSelect.value = State.openaiModel;
+$openaiQuality.value = State.openaiQuality;
+
+$openaiApiKey.addEventListener('input', () => {
+  State.openaiApiKey = $openaiApiKey.value.trim();
+  localStorage.setItem('openai-api-key', State.openaiApiKey);
+});
+$openaiKeyToggle.addEventListener('click', () => {
+  $openaiApiKey.type = $openaiApiKey.type === 'password' ? 'text' : 'password';
+});
+$openaiModelSelect.addEventListener('change', () => {
+  State.openaiModel = $openaiModelSelect.value;
+  localStorage.setItem('openai-model', State.openaiModel);
+});
+$openaiQuality.addEventListener('change', () => {
+  State.openaiQuality = $openaiQuality.value;
+  localStorage.setItem('openai-quality', State.openaiQuality);
+});
+
+function applyProviderUI() {
+  const isGemini = State.provider === 'gemini';
+  $geminiKeyRow.style.display = isGemini ? '' : 'none';
+  $openaiKeyRow.style.display = isGemini ? 'none' : '';
+  $rowGeminiModel.style.display = isGemini ? '' : 'none';
+  $rowOpenaiModel.style.display = isGemini ? 'none' : '';
+  $rowOpenaiQuality.style.display = isGemini ? 'none' : '';
+}
+
+document.querySelectorAll('input[name="provider"]').forEach(el => {
+  el.checked = (el.value === State.provider);
+  el.addEventListener('change', () => {
+    if (el.checked) {
+      State.provider = el.value;
+      localStorage.setItem('image-provider', State.provider);
+      applyProviderUI();
+    }
+  });
+});
+applyProviderUI();
 
 // ===== Aspect ratio =====
 function updateAspectState() {
@@ -1506,9 +1596,96 @@ async function callGeminiAPI(parts) {
   };
 }
 
+// ===== OpenAI API =====
+// Map target aspect to OpenAI-supported size (GPT Image 2 supports 1024x1024, 1536x1024, 1024x1536, auto)
+function _openaiSizeForAspect() {
+  const w = State.targetW || 1024;
+  const h = State.targetH || 1024;
+  const r = w / h;
+  if (Math.abs(r - 1) < 0.15) return '1024x1024';
+  if (r > 1) return '1536x1024';
+  return '1024x1536';
+}
+
+function _base64ToBlob(base64, mimeType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mimeType });
+}
+
+async function callOpenAIImageAPI(parts) {
+  if (!State.openaiApiKey) throw new Error('OpenAI APIキーが設定されていません');
+
+  // Split parts into text prompts and image inputs
+  const textChunks = [];
+  const imageParts = [];
+  for (const p of parts) {
+    if (p.text) textChunks.push(p.text);
+    else if (p.inlineData) imageParts.push(p.inlineData);
+  }
+  const prompt = textChunks.join('\n\n').trim() || '広告クリエイティブを生成してください';
+  const size = _openaiSizeForAspect();
+  const model = State.openaiModel || 'gpt-image-2';
+  const quality = State.openaiQuality || 'auto';
+
+  let resp;
+  if (imageParts.length > 0) {
+    // Use /v1/images/edits with multipart form
+    const form = new FormData();
+    form.append('model', model);
+    form.append('prompt', prompt);
+    form.append('size', size);
+    form.append('quality', quality);
+    imageParts.forEach((img, idx) => {
+      const ext = (img.mimeType || 'image/png').split('/')[1] || 'png';
+      const blob = _base64ToBlob(img.data, img.mimeType || 'image/png');
+      form.append('image[]', blob, `input_${idx}.${ext}`);
+    });
+    resp = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${State.openaiApiKey}` },
+      body: form,
+    });
+  } else {
+    // Use /v1/images/generations with JSON
+    resp = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${State.openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model, prompt, size, quality, n: 1 }),
+    });
+  }
+
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}));
+    const msg = errData?.error?.message || `HTTP ${resp.status}`;
+    throw new Error(msg);
+  }
+
+  const data = await resp.json();
+  const item = data.data?.[0];
+  if (!item || !item.b64_json) throw new Error('画像が生成されませんでした');
+
+  return {
+    imageBase64: item.b64_json,
+    mimeType: 'image/png',
+    text: item.revised_prompt || '',
+  };
+}
+
+// ===== Provider dispatcher =====
+async function callImageAPI(parts) {
+  if (State.provider === 'openai') return callOpenAIImageAPI(parts);
+  return callGeminiAPI(parts);
+}
+
 // ===== Generation =====
 async function runGeneration(contextImages = [], rejectedImages = []) {
-  if (!State.apiKey) { showToast('APIキーを入力してください', 'error'); return; }
+  const activeKey = State.provider === 'openai' ? State.openaiApiKey : State.apiKey;
+  if (!activeKey) { showToast('APIキーを入力してください', 'error'); return; }
 
   // Determine generation mode: pattern-based or prompt-based
   const schedule = getGenerationSchedule();
@@ -1751,7 +1928,7 @@ ${variation}
 async function callGeminiAPIWithRetry(parts, maxRetries) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const result = await callGeminiAPI(parts);
+      const result = await callImageAPI(parts);
       return result;
     } catch (err) {
       const isRetryable = err.message.includes('429')
@@ -1759,6 +1936,7 @@ async function callGeminiAPIWithRetry(parts, maxRetries) {
         || err.message.includes('high demand')
         || err.message.includes('overloaded')
         || err.message.includes('503')
+        || err.message.includes('rate_limit')
         || err.message.includes('画像が生成されませんでした');
       if (attempt < maxRetries && isRetryable) {
         // Exponential backoff: 3s, 6s, 12s, 24s, 48s + random jitter
