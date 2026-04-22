@@ -1802,9 +1802,17 @@ $modelSelect.addEventListener('change', () => {
 // ===== Gemini API =====
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+// HTTPヘッダはISO-8859-1しか受け付けないため、非ASCII文字(全角スペース、日本語、スマートクォート等)を除去
+function sanitizeHeaderValue(v) {
+  return (v || '').toString().replace(/[^\x20-\x7E]/g, '').trim();
+}
+
 async function callGeminiAPI(parts) {
   const model = State.model || 'gemini-2.5-flash-image';
   const url = `${API_BASE}/${model}:generateContent`;
+  const apiKey = sanitizeHeaderValue(State.apiKey);
+  if (!apiKey) throw new Error('Gemini APIキーが未設定、または不正な文字を含んでいます');
+
   const body = {
     contents: [{ parts }],
     generationConfig: {
@@ -1820,7 +1828,7 @@ async function callGeminiAPI(parts) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': State.apiKey,
+      'x-goog-api-key': apiKey,
     },
     body: JSON.stringify(body),
   });
@@ -1868,7 +1876,8 @@ function _base64ToBlob(base64, mimeType) {
 }
 
 async function callOpenAIImageAPI(parts) {
-  if (!State.openaiApiKey) throw new Error('OpenAI APIキーが設定されていません');
+  const openaiKey = sanitizeHeaderValue(State.openaiApiKey);
+  if (!openaiKey) throw new Error('OpenAI APIキーが未設定、または不正な文字を含んでいます');
 
   // Split parts into text prompts and image inputs
   const textChunks = [];
@@ -1897,7 +1906,7 @@ async function callOpenAIImageAPI(parts) {
     });
     resp = await fetch('https://api.openai.com/v1/images/edits', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${State.openaiApiKey}` },
+      headers: { 'Authorization': `Bearer ${openaiKey}` },
       body: form,
     });
   } else {
@@ -1905,7 +1914,7 @@ async function callOpenAIImageAPI(parts) {
     resp = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${State.openaiApiKey}`,
+        'Authorization': `Bearer ${openaiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ model, prompt, size, quality, n: 1 }),
