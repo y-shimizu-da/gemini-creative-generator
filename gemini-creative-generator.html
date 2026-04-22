@@ -1290,6 +1290,15 @@ function resizeImageToPixels(base64, mimeType, targetW, targetH) {
 }
 
 // ===== Prompt Patterns =====
+// 全テンプレートに自動付加される共通制約（編集UIには表示されない）
+const COMMON_CONSTRAINTS = `
+【全プロンプト共通の必須制約】
+・同じ画像は絶対に生成しないこと。毎回異なるデザイン・構図・配色にしてください。
+・ロゴの自動生成はしないこと。ロゴ画像が別途提供されていない場合、画像内にロゴを新規に作成しないでください。
+・提供された画像に商品画像が含まれる場合、そのパッケージ・デザイン・形状を一切変更・修正しないでください。商品画像はそのまま忠実に再現してください。
+・明確な指示がない場合は、商用フォント（Morisawa、Adobe Fonts契約フォント、その他有料商用フォントなど）を利用しないでください。オープンライセンス / 無償利用可能なフォントを使用してください。
+`.trim();
+
 const PROMPT_PATTERNS = [
   {
     id: 'standard',
@@ -1303,10 +1312,6 @@ const PROMPT_PATTERNS = [
 
 #条件
 ・現在配信している記事LPや、デマンドジェネレーションで配信しているテキストを送るので、そこを把握したうえでマーケティング戦略の理解をしてください。
-#同じ画像は絶対に生成しないこと
-#ロゴの自動生成もしないこと
-#提供された画像に商品画像が含まれる場合、パッケージやデザインの変更修正はしないこと
-#指示がない場合は商用フォントを利用しないこと
 
 #成果の良いコピー
 ・
@@ -2047,6 +2052,8 @@ async function runGeneration(contextImages = [], rejectedImages = []) {
 4. 画像サイズは${State.targetW}×${State.targetH}pxの構図で作成してください。
 5. テキストは読みやすいフォントで出力し、参考画像のコピーを踏襲してください。${assetInstruction}
 
+${COMMON_CONSTRAINTS}
+
 【デザインスタイル】
 ${variation}
 
@@ -2453,7 +2460,9 @@ document.getElementById('btn-retry-all').addEventListener('click', async () => {
 
     const parts = [];
     if (State.prompt.trim()) {
-      parts.push({ text: State.prompt.trim() });
+      parts.push({ text: COMMON_CONSTRAINTS + '\n\n' + State.prompt.trim() });
+    } else {
+      parts.push({ text: COMMON_CONSTRAINTS });
     }
     for (const img of State.referenceImages) {
       parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
@@ -2976,7 +2985,9 @@ async function retryGeneration(round, result, index, card) {
   // Build simple parts from current prompt + reference images
   const parts = [];
   if (State.prompt.trim()) {
-    parts.push({ text: State.prompt.trim() });
+    parts.push({ text: COMMON_CONSTRAINTS + '\n\n' + State.prompt.trim() });
+  } else {
+    parts.push({ text: COMMON_CONSTRAINTS });
   }
   for (const img of State.referenceImages) {
     parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
