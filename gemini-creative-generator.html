@@ -3866,7 +3866,7 @@ function renderPatternPanels() {
 
     const title = document.createElement('span');
     title.textContent = pat.name;
-    title.style.cssText = 'font-weight:600;font-size:.85rem;';
+    title.style.cssText = 'font-weight:600;font-size:.85rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
 
     const countWrap = document.createElement('div');
     countWrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;';
@@ -3890,8 +3890,31 @@ function renderPatternPanels() {
     countWrap.appendChild(countSlider);
     countWrap.appendChild(countVal);
 
+    // Remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = '×';
+    removeBtn.title = 'この選択を削除';
+    removeBtn.style.cssText = 'background:none;border:1px solid #555;border-radius:4px;color:#aaa;width:24px;height:24px;line-height:1;cursor:pointer;font-size:1rem;margin-left:6px;flex-shrink:0;transition:all .15s;';
+    removeBtn.addEventListener('mouseenter', () => {
+      removeBtn.style.background = '#E94560';
+      removeBtn.style.borderColor = '#E94560';
+      removeBtn.style.color = '#fff';
+    });
+    removeBtn.addEventListener('mouseleave', () => {
+      removeBtn.style.background = 'none';
+      removeBtn.style.borderColor = '#555';
+      removeBtn.style.color = '#aaa';
+    });
+    removeBtn.addEventListener('click', () => {
+      ps.checked = false;
+      renderPatternPanels();
+      // Refresh dropdown counts if open
+      if ($dropdown && $dropdown.style.display !== 'none') buildDropdown();
+    });
+
     header.appendChild(title);
     header.appendChild(countWrap);
+    header.appendChild(removeBtn);
     panel.appendChild(header);
 
     // Editable prompt
@@ -3942,9 +3965,12 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// 現在開いているカテゴリを記憶（ドロップダウン再構築後も維持）
+let expandedCategory = null;
+
 function buildDropdown() {
   $dropdown.innerHTML = '';
-  $dropdown.style.minWidth = '200px';
+  $dropdown.style.cssText = 'display:block;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:300px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow-y:auto;';
 
   // Group patterns by category, preserving original order
   const categoryOrder = [];
@@ -3958,75 +3984,17 @@ function buildDropdown() {
     grouped[cat].push(pat);
   });
 
-  let submenu = null;
-  let activeCategoryRow = null;
-
-  function closeSubmenu() {
-    if (submenu) {
-      submenu.remove();
-      submenu = null;
-    }
-    if (activeCategoryRow) {
-      activeCategoryRow.style.background = 'none';
-      activeCategoryRow = null;
-    }
-  }
-
-  function openSubmenu(categoryRow, patterns) {
-    closeSubmenu();
-    activeCategoryRow = categoryRow;
-    categoryRow.style.background = '#2a2a4e';
-
-    submenu = document.createElement('div');
-    submenu.style.cssText = 'position:absolute;left:100%;top:0;background:#1a1a2e;border:1px solid #444;border-radius:6px;min-width:240px;z-index:101;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:480px;overflow-y:auto;';
-
-    patterns.forEach((pat, idx) => {
-      const ps = patternState[pat.id];
-
-      const item = document.createElement('label');
-      const isLast = idx === patterns.length - 1;
-      item.style.cssText = `display:flex;align-items:flex-start;gap:8px;padding:10px 14px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}`;
-      item.addEventListener('mouseenter', () => { item.style.background = '#2a2a4e'; });
-      item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
-
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = ps.checked;
-      cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
-      cb.addEventListener('change', (e) => {
-        e.stopPropagation();
-        ps.checked = cb.checked;
-        if (ps.checked && !ps.editedPrompt) {
-          ps.editedPrompt = pat.prompt.trim();
-        }
-        renderPatternPanels();
-      });
-
-      const textWrap = document.createElement('div');
-      const name = document.createElement('div');
-      name.textContent = pat.name;
-      name.style.cssText = 'font-weight:600;font-size:.8rem;margin-bottom:2px;';
-      const desc = document.createElement('div');
-      desc.textContent = pat.description;
-      desc.style.cssText = 'font-size:.65rem;color:#888;';
-      textWrap.appendChild(name);
-      textWrap.appendChild(desc);
-
-      item.appendChild(cb);
-      item.appendChild(textWrap);
-      submenu.appendChild(item);
-    });
-
-    categoryRow.appendChild(submenu);
-  }
-
   categoryOrder.forEach((cat, idx) => {
     const patterns = grouped[cat];
     const checkedCount = patterns.filter(p => patternState[p.id].checked).length;
     const isLast = idx === categoryOrder.length - 1;
+    const isExpanded = expandedCategory === cat;
 
+    // Category header
     const row = document.createElement('div');
-    row.style.cssText = `position:relative;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}`;
+    row.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;transition:background .15s;${isLast && !isExpanded ? '' : 'border-bottom:1px solid #333;'};${isExpanded ? 'background:#2a2a4e;' : ''}`;
+    row.addEventListener('mouseenter', () => { if (!isExpanded) row.style.background = '#252543'; });
+    row.addEventListener('mouseleave', () => { if (!isExpanded) row.style.background = 'none'; });
 
     const left = document.createElement('div');
     const catName = document.createElement('div');
@@ -4039,21 +4007,58 @@ function buildDropdown() {
     left.appendChild(catMeta);
 
     const arrow = document.createElement('span');
-    arrow.textContent = '▸';
-    arrow.style.cssText = 'color:#888;font-size:.7rem;margin-left:8px;';
+    arrow.textContent = isExpanded ? '▾' : '▸';
+    arrow.style.cssText = 'color:#888;font-size:.75rem;margin-left:8px;';
 
     row.appendChild(left);
     row.appendChild(arrow);
-
-    row.addEventListener('mouseenter', () => {
-      openSubmenu(row, patterns);
+    row.addEventListener('click', () => {
+      expandedCategory = isExpanded ? null : cat;
+      buildDropdown();
     });
-
     $dropdown.appendChild(row);
-  });
 
-  // Close submenu when leaving the dropdown entirely
-  $dropdown.onmouseleave = closeSubmenu;
+    // Expanded sub-items (rendered directly below the category header)
+    if (isExpanded) {
+      patterns.forEach((pat, pIdx) => {
+        const ps = patternState[pat.id];
+        const subIsLast = pIdx === patterns.length - 1;
+
+        const item = document.createElement('label');
+        item.style.cssText = `display:flex;align-items:flex-start;gap:8px;padding:10px 14px 10px 28px;cursor:pointer;transition:background .15s;background:#16213e;${(subIsLast && isLast) ? '' : 'border-bottom:1px solid #2a2a4e;'}`;
+        item.addEventListener('mouseenter', () => { item.style.background = '#1f2a4e'; });
+        item.addEventListener('mouseleave', () => { item.style.background = '#16213e'; });
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = ps.checked;
+        cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
+        cb.addEventListener('change', (e) => {
+          e.stopPropagation();
+          ps.checked = cb.checked;
+          if (ps.checked && !ps.editedPrompt) {
+            ps.editedPrompt = pat.prompt.trim();
+          }
+          renderPatternPanels();
+          buildDropdown();
+        });
+
+        const textWrap = document.createElement('div');
+        const name = document.createElement('div');
+        name.textContent = pat.name;
+        name.style.cssText = 'font-weight:600;font-size:.78rem;margin-bottom:2px;';
+        const desc = document.createElement('div');
+        desc.textContent = pat.description;
+        desc.style.cssText = 'font-size:.65rem;color:#888;line-height:1.4;';
+        textWrap.appendChild(name);
+        textWrap.appendChild(desc);
+
+        item.appendChild(cb);
+        item.appendChild(textWrap);
+        $dropdown.appendChild(item);
+      });
+    }
+  });
 }
 
 // ===== Toast =====
