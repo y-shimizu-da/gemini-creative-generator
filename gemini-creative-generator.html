@@ -3984,12 +3984,7 @@ function positionDropdownFixed() {
   $dropdown.style.top = (rect.bottom + 4) + 'px';
 }
 
-function buildDropdown() {
-  $dropdown.innerHTML = '';
-  $dropdown.style.cssText = 'display:flex;position:fixed;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:560px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow:hidden;';
-  positionDropdownFixed();
-
-  // Group patterns by category, preserving original order
+function _groupPatternsByCategory() {
   const categoryOrder = [];
   const grouped = {};
   PROMPT_PATTERNS.forEach(pat => {
@@ -4000,53 +3995,12 @@ function buildDropdown() {
     }
     grouped[cat].push(pat);
   });
+  return { categoryOrder, grouped };
+}
 
-  // Default to first category if none selected yet
-  if (!expandedCategory || !grouped[expandedCategory]) {
-    expandedCategory = categoryOrder[0];
-  }
-
-  // ===== Left column: categories =====
-  const leftCol = document.createElement('div');
-  leftCol.style.cssText = 'width:200px;flex-shrink:0;border-right:1px solid #333;overflow-y:auto;';
-
-  categoryOrder.forEach((cat, idx) => {
-    const patterns = grouped[cat];
-    const checkedCount = patterns.filter(p => patternState[p.id].checked).length;
-    const isLast = idx === categoryOrder.length - 1;
-    const isActive = expandedCategory === cat;
-
-    const row = document.createElement('div');
-    row.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}${isActive ? 'background:#2a2a4e;' : ''}`;
-    row.addEventListener('mouseenter', () => { if (!isActive) row.style.background = '#252543'; });
-    row.addEventListener('mouseleave', () => { if (!isActive) row.style.background = 'none'; });
-
-    const left = document.createElement('div');
-    left.style.cssText = 'min-width:0;flex:1;';
-    const catName = document.createElement('div');
-    catName.textContent = cat;
-    catName.style.cssText = 'font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    const catMeta = document.createElement('div');
-    catMeta.textContent = `${patterns.length}件${checkedCount > 0 ? ` / ${checkedCount}選択中` : ''}`;
-    catMeta.style.cssText = `font-size:.62rem;color:${checkedCount > 0 ? '#E94560' : '#888'};margin-top:2px;`;
-    left.appendChild(catName);
-    left.appendChild(catMeta);
-
-    const arrow = document.createElement('span');
-    arrow.textContent = '▸';
-    arrow.style.cssText = `color:${isActive ? '#fff' : '#888'};font-size:.75rem;margin-left:8px;flex-shrink:0;`;
-
-    row.appendChild(left);
-    row.appendChild(arrow);
-    row.addEventListener('click', () => {
-      expandedCategory = cat;
-      buildDropdown();
-    });
-    leftCol.appendChild(row);
-  });
-
-  // ===== Right column: prompts of selected category =====
+function _createRightCol(grouped) {
   const rightCol = document.createElement('div');
+  rightCol.id = 'tpl-right-col';
   rightCol.style.cssText = 'flex:1;overflow-y:auto;min-width:0;';
 
   const patterns = grouped[expandedCategory] || [];
@@ -4070,7 +4024,10 @@ function buildDropdown() {
         ps.editedPrompt = pat.prompt.trim();
       }
       renderPatternPanels();
-      buildDropdown();
+      // 左カラムのカウント表示を更新
+      _refreshLeftColCounts();
+      // 右カラムの選択中ハイライト更新のため差し替え
+      _swapRightCol();
     });
 
     const textWrap = document.createElement('div');
@@ -4088,6 +4045,104 @@ function buildDropdown() {
     item.appendChild(textWrap);
     rightCol.appendChild(item);
   });
+
+  return rightCol;
+}
+
+function _swapRightCol() {
+  // 右カラムだけ差し替え（左カラムは再生成しないのでマウスイベントが安定）
+  const { grouped } = _groupPatternsByCategory();
+  const oldRight = document.getElementById('tpl-right-col');
+  if (!oldRight) return;
+  const newRight = _createRightCol(grouped);
+  oldRight.replaceWith(newRight);
+}
+
+function _refreshLeftColCounts() {
+  // 左カラムのカウント表示のみ更新（行は再生成しない）
+  const { grouped } = _groupPatternsByCategory();
+  const leftCol = document.getElementById('tpl-left-col');
+  if (!leftCol) return;
+  Array.from(leftCol.children).forEach(row => {
+    const cat = row.dataset.category;
+    if (!cat || !grouped[cat]) return;
+    const checkedCount = grouped[cat].filter(p => patternState[p.id].checked).length;
+    const meta = row.querySelector('.cat-meta');
+    if (meta) {
+      meta.textContent = `${grouped[cat].length}件${checkedCount > 0 ? ` / ${checkedCount}選択中` : ''}`;
+      meta.style.color = checkedCount > 0 ? '#E94560' : '#888';
+    }
+  });
+}
+
+function _setActiveCategory(cat) {
+  if (expandedCategory === cat) return;
+  expandedCategory = cat;
+  // 左カラムの全行のアクティブ状態を更新
+  const leftCol = document.getElementById('tpl-left-col');
+  if (leftCol) {
+    Array.from(leftCol.children).forEach(row => {
+      const isActive = row.dataset.category === cat;
+      row.style.background = isActive ? '#2a2a4e' : 'none';
+      const arrow = row.querySelector('.cat-arrow');
+      if (arrow) arrow.style.color = isActive ? '#fff' : '#888';
+    });
+  }
+  _swapRightCol();
+}
+
+function buildDropdown() {
+  $dropdown.innerHTML = '';
+  $dropdown.style.cssText = 'display:flex;position:fixed;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:560px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow:hidden;';
+  positionDropdownFixed();
+
+  const { categoryOrder, grouped } = _groupPatternsByCategory();
+
+  // Default to first category if none selected yet
+  if (!expandedCategory || !grouped[expandedCategory]) {
+    expandedCategory = categoryOrder[0];
+  }
+
+  // ===== Left column: categories =====
+  const leftCol = document.createElement('div');
+  leftCol.id = 'tpl-left-col';
+  leftCol.style.cssText = 'width:200px;flex-shrink:0;border-right:1px solid #333;overflow-y:auto;';
+
+  categoryOrder.forEach((cat, idx) => {
+    const patterns = grouped[cat];
+    const checkedCount = patterns.filter(p => patternState[p.id].checked).length;
+    const isLast = idx === categoryOrder.length - 1;
+    const isActive = expandedCategory === cat;
+
+    const row = document.createElement('div');
+    row.dataset.category = cat;
+    row.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}${isActive ? 'background:#2a2a4e;' : ''}`;
+
+    const left = document.createElement('div');
+    left.style.cssText = 'min-width:0;flex:1;';
+    const catName = document.createElement('div');
+    catName.textContent = cat;
+    catName.style.cssText = 'font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    const catMeta = document.createElement('div');
+    catMeta.className = 'cat-meta';
+    catMeta.textContent = `${patterns.length}件${checkedCount > 0 ? ` / ${checkedCount}選択中` : ''}`;
+    catMeta.style.cssText = `font-size:.62rem;color:${checkedCount > 0 ? '#E94560' : '#888'};margin-top:2px;`;
+    left.appendChild(catName);
+    left.appendChild(catMeta);
+
+    const arrow = document.createElement('span');
+    arrow.className = 'cat-arrow';
+    arrow.textContent = '▸';
+    arrow.style.cssText = `color:${isActive ? '#fff' : '#888'};font-size:.75rem;margin-left:8px;flex-shrink:0;`;
+
+    row.appendChild(left);
+    row.appendChild(arrow);
+    // ホバーで切替（クリック不要）
+    row.addEventListener('mouseenter', () => _setActiveCategory(cat));
+    leftCol.appendChild(row);
+  });
+
+  const rightCol = _createRightCol(grouped);
 
   $dropdown.appendChild(leftCol);
   $dropdown.appendChild(rightCol);
