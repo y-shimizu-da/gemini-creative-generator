@@ -3968,9 +3968,26 @@ document.addEventListener('click', (e) => {
 // 現在選択中のカテゴリを記憶（ドロップダウン再構築後も維持）
 let expandedCategory = null;
 
+function positionDropdownFixed() {
+  // ボタンの位置を取得し、ビューポート基準でドロップダウンを配置（サイドバーのoverflow制約から逃がす）
+  const btn = document.getElementById('btn-template');
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const dropdownW = 560;
+  const margin = 8;
+  // 基本はボタンの真下、右端揃え
+  let left = rect.right - dropdownW;
+  if (left < margin) left = margin; // 左にはみ出す場合はビューポート左端に寄せる
+  const maxLeft = window.innerWidth - dropdownW - margin;
+  if (left > maxLeft) left = maxLeft;
+  $dropdown.style.left = left + 'px';
+  $dropdown.style.top = (rect.bottom + 4) + 'px';
+}
+
 function buildDropdown() {
   $dropdown.innerHTML = '';
-  $dropdown.style.cssText = 'display:flex;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:560px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow:hidden;';
+  $dropdown.style.cssText = 'display:flex;position:fixed;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:560px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow:hidden;';
+  positionDropdownFixed();
 
   // Group patterns by category, preserving original order
   const categoryOrder = [];
