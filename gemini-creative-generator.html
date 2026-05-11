@@ -3965,12 +3965,12 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// 現在開いているカテゴリを記憶（ドロップダウン再構築後も維持）
+// 現在選択中のカテゴリを記憶（ドロップダウン再構築後も維持）
 let expandedCategory = null;
 
 function buildDropdown() {
   $dropdown.innerHTML = '';
-  $dropdown.style.cssText = 'display:block;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:300px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow-y:auto;';
+  $dropdown.style.cssText = 'display:flex;position:absolute;right:0;top:100%;margin-top:4px;background:#1a1a2e;border:1px solid #444;border-radius:6px;width:560px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:70vh;overflow:hidden;';
 
   // Group patterns by category, preserving original order
   const categoryOrder = [];
@@ -3984,81 +3984,96 @@ function buildDropdown() {
     grouped[cat].push(pat);
   });
 
+  // Default to first category if none selected yet
+  if (!expandedCategory || !grouped[expandedCategory]) {
+    expandedCategory = categoryOrder[0];
+  }
+
+  // ===== Left column: categories =====
+  const leftCol = document.createElement('div');
+  leftCol.style.cssText = 'width:200px;flex-shrink:0;border-right:1px solid #333;overflow-y:auto;';
+
   categoryOrder.forEach((cat, idx) => {
     const patterns = grouped[cat];
     const checkedCount = patterns.filter(p => patternState[p.id].checked).length;
     const isLast = idx === categoryOrder.length - 1;
-    const isExpanded = expandedCategory === cat;
+    const isActive = expandedCategory === cat;
 
-    // Category header
     const row = document.createElement('div');
-    row.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;transition:background .15s;${isLast && !isExpanded ? '' : 'border-bottom:1px solid #333;'};${isExpanded ? 'background:#2a2a4e;' : ''}`;
-    row.addEventListener('mouseenter', () => { if (!isExpanded) row.style.background = '#252543'; });
-    row.addEventListener('mouseleave', () => { if (!isExpanded) row.style.background = 'none'; });
+    row.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}${isActive ? 'background:#2a2a4e;' : ''}`;
+    row.addEventListener('mouseenter', () => { if (!isActive) row.style.background = '#252543'; });
+    row.addEventListener('mouseleave', () => { if (!isActive) row.style.background = 'none'; });
 
     const left = document.createElement('div');
+    left.style.cssText = 'min-width:0;flex:1;';
     const catName = document.createElement('div');
     catName.textContent = cat;
-    catName.style.cssText = 'font-weight:600;font-size:.8rem;';
+    catName.style.cssText = 'font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
     const catMeta = document.createElement('div');
-    catMeta.textContent = `${patterns.length}件${checkedCount > 0 ? ` / ${checkedCount}件選択中` : ''}`;
-    catMeta.style.cssText = `font-size:.65rem;color:${checkedCount > 0 ? '#E94560' : '#888'};margin-top:2px;`;
+    catMeta.textContent = `${patterns.length}件${checkedCount > 0 ? ` / ${checkedCount}選択中` : ''}`;
+    catMeta.style.cssText = `font-size:.62rem;color:${checkedCount > 0 ? '#E94560' : '#888'};margin-top:2px;`;
     left.appendChild(catName);
     left.appendChild(catMeta);
 
     const arrow = document.createElement('span');
-    arrow.textContent = isExpanded ? '▾' : '▸';
-    arrow.style.cssText = 'color:#888;font-size:.75rem;margin-left:8px;';
+    arrow.textContent = '▸';
+    arrow.style.cssText = `color:${isActive ? '#fff' : '#888'};font-size:.75rem;margin-left:8px;flex-shrink:0;`;
 
     row.appendChild(left);
     row.appendChild(arrow);
     row.addEventListener('click', () => {
-      expandedCategory = isExpanded ? null : cat;
+      expandedCategory = cat;
       buildDropdown();
     });
-    $dropdown.appendChild(row);
-
-    // Expanded sub-items (rendered directly below the category header)
-    if (isExpanded) {
-      patterns.forEach((pat, pIdx) => {
-        const ps = patternState[pat.id];
-        const subIsLast = pIdx === patterns.length - 1;
-
-        const item = document.createElement('label');
-        item.style.cssText = `display:flex;align-items:flex-start;gap:8px;padding:10px 14px 10px 28px;cursor:pointer;transition:background .15s;background:#16213e;${(subIsLast && isLast) ? '' : 'border-bottom:1px solid #2a2a4e;'}`;
-        item.addEventListener('mouseenter', () => { item.style.background = '#1f2a4e'; });
-        item.addEventListener('mouseleave', () => { item.style.background = '#16213e'; });
-
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = ps.checked;
-        cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
-        cb.addEventListener('change', (e) => {
-          e.stopPropagation();
-          ps.checked = cb.checked;
-          if (ps.checked && !ps.editedPrompt) {
-            ps.editedPrompt = pat.prompt.trim();
-          }
-          renderPatternPanels();
-          buildDropdown();
-        });
-
-        const textWrap = document.createElement('div');
-        const name = document.createElement('div');
-        name.textContent = pat.name;
-        name.style.cssText = 'font-weight:600;font-size:.78rem;margin-bottom:2px;';
-        const desc = document.createElement('div');
-        desc.textContent = pat.description;
-        desc.style.cssText = 'font-size:.65rem;color:#888;line-height:1.4;';
-        textWrap.appendChild(name);
-        textWrap.appendChild(desc);
-
-        item.appendChild(cb);
-        item.appendChild(textWrap);
-        $dropdown.appendChild(item);
-      });
-    }
+    leftCol.appendChild(row);
   });
+
+  // ===== Right column: prompts of selected category =====
+  const rightCol = document.createElement('div');
+  rightCol.style.cssText = 'flex:1;overflow-y:auto;min-width:0;';
+
+  const patterns = grouped[expandedCategory] || [];
+  patterns.forEach((pat, pIdx) => {
+    const ps = patternState[pat.id];
+    const subIsLast = pIdx === patterns.length - 1;
+
+    const item = document.createElement('label');
+    item.style.cssText = `display:flex;align-items:flex-start;gap:8px;padding:10px 14px;cursor:pointer;transition:background .15s;${subIsLast ? '' : 'border-bottom:1px solid #333;'}${ps.checked ? 'background:#1f2a4e;' : ''}`;
+    item.addEventListener('mouseenter', () => { item.style.background = '#252543'; });
+    item.addEventListener('mouseleave', () => { item.style.background = ps.checked ? '#1f2a4e' : 'none'; });
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = ps.checked;
+    cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      ps.checked = cb.checked;
+      if (ps.checked && !ps.editedPrompt) {
+        ps.editedPrompt = pat.prompt.trim();
+      }
+      renderPatternPanels();
+      buildDropdown();
+    });
+
+    const textWrap = document.createElement('div');
+    textWrap.style.cssText = 'min-width:0;flex:1;';
+    const name = document.createElement('div');
+    name.textContent = pat.name;
+    name.style.cssText = 'font-weight:600;font-size:.78rem;margin-bottom:2px;';
+    const desc = document.createElement('div');
+    desc.textContent = pat.description;
+    desc.style.cssText = 'font-size:.65rem;color:#888;line-height:1.4;';
+    textWrap.appendChild(name);
+    textWrap.appendChild(desc);
+
+    item.appendChild(cb);
+    item.appendChild(textWrap);
+    rightCol.appendChild(item);
+  });
+
+  $dropdown.appendChild(leftCol);
+  $dropdown.appendChild(rightCol);
 }
 
 // ===== Toast =====
