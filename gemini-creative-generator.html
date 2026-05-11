@@ -1303,6 +1303,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'standard',
     name: 'スタンダード',
+    category: '汎用',
     description: '汎用的な広告クリエイティブ生成テンプレート',
     prompt: `＃依頼
 クリエイティブのコピーは変えず、デザインや構成を変えてクリエイティブを生成したい
@@ -1324,6 +1325,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'skincare',
     name: 'スキンケア特化',
+    category: '美容・スキンケア',
     description: 'スキンケア・美容商材に最適化',
     prompt: `# 依頼：スキンケア商材のマーケティング戦略に基づくクリエイティブ生成
 提供する記事LPとリサーチ情報を読み込み、ユーザーの「肌悩み」と「理想の肌状態」を深く理解した上で、以下の3パターンのデザイン構成案を作成してください。
@@ -1363,6 +1365,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'pet',
     name: 'ペット系',
+    category: 'ペット',
     description: 'ペットフード・用品などペット関連商材に最適化',
     prompt: `# 依頼：ペット系商材のマーケティング戦略に基づくクリエイティブ構成案の生成
 
@@ -1403,6 +1406,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'food',
     name: '食品系',
+    category: '食品・飲料',
     description: '食品・飲料などグルメ商材に最適化',
     prompt: `# 依頼：食品系商材のマーケティング戦略に基づくクリエイティブ構成案の生成
 
@@ -1442,6 +1446,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'yoga',
     name: 'ヨガ案件',
+    category: 'フィットネス',
     description: 'ヨガ・フィットネス関連商材に最適化',
     prompt: `# 依頼：ヨガ関連商材のマーケティング戦略に基づくクリエイティブ構成案の生成
 
@@ -1482,6 +1487,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'bust_care',
     name: 'バストケア案件',
+    category: 'インナー・ボディケア',
     description: 'ブラジャー・バストケア商材に最適化',
     prompt: `# 依頼：下着（ブラジャー）商材のマーケティング戦略に基づくクリエイティブ生成
 
@@ -1524,6 +1530,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'bridal',
     name: 'ブライダル案件',
+    category: 'ブライダル',
     description: '結婚式場・ブライダル商材に最適化',
     prompt: `# 依頼：ブライダル・結婚式商材のマーケティング戦略に基づくクリエイティブ生成
 
@@ -1566,6 +1573,7 @@ const PROMPT_PATTERNS = [
   {
     id: 'hair_growth',
     name: '育毛剤案件',
+    category: 'ヘアケア',
     description: '育毛剤・スカルプケア商材に最適化',
     prompt: `# 依頼：育毛剤・スカルプケア商材のマーケティング戦略に基づくクリエイティブ生成
 
@@ -1744,42 +1752,116 @@ document.addEventListener('click', (e) => {
 
 function buildDropdown() {
   $dropdown.innerHTML = '';
+  $dropdown.style.minWidth = '200px';
+
+  // Group patterns by category, preserving original order
+  const categoryOrder = [];
+  const grouped = {};
   PROMPT_PATTERNS.forEach(pat => {
-    const ps = patternState[pat.id];
+    const cat = pat.category || 'その他';
+    if (!(cat in grouped)) {
+      grouped[cat] = [];
+      categoryOrder.push(cat);
+    }
+    grouped[cat].push(pat);
+  });
 
-    const item = document.createElement('label');
-    item.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:10px 14px;cursor:pointer;border-bottom:1px solid #333;transition:background .15s;';
-    item.addEventListener('mouseenter', () => { item.style.background = '#2a2a4e'; });
-    item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+  let submenu = null;
+  let activeCategoryRow = null;
 
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = ps.checked;
-    cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
-    cb.addEventListener('change', (e) => {
-      e.stopPropagation();
-      ps.checked = cb.checked;
-      if (ps.checked && !ps.editedPrompt) {
-        ps.editedPrompt = pat.prompt.trim();
-      }
-      renderPatternPanels();
+  function closeSubmenu() {
+    if (submenu) {
+      submenu.remove();
+      submenu = null;
+    }
+    if (activeCategoryRow) {
+      activeCategoryRow.style.background = 'none';
+      activeCategoryRow = null;
+    }
+  }
+
+  function openSubmenu(categoryRow, patterns) {
+    closeSubmenu();
+    activeCategoryRow = categoryRow;
+    categoryRow.style.background = '#2a2a4e';
+
+    submenu = document.createElement('div');
+    submenu.style.cssText = 'position:absolute;left:100%;top:0;background:#1a1a2e;border:1px solid #444;border-radius:6px;min-width:240px;z-index:101;box-shadow:0 4px 12px rgba(0,0,0,.5);max-height:480px;overflow-y:auto;';
+
+    patterns.forEach((pat, idx) => {
+      const ps = patternState[pat.id];
+
+      const item = document.createElement('label');
+      const isLast = idx === patterns.length - 1;
+      item.style.cssText = `display:flex;align-items:flex-start;gap:8px;padding:10px 14px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}`;
+      item.addEventListener('mouseenter', () => { item.style.background = '#2a2a4e'; });
+      item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = ps.checked;
+      cb.style.cssText = 'margin-top:2px;flex-shrink:0;';
+      cb.addEventListener('change', (e) => {
+        e.stopPropagation();
+        ps.checked = cb.checked;
+        if (ps.checked && !ps.editedPrompt) {
+          ps.editedPrompt = pat.prompt.trim();
+        }
+        renderPatternPanels();
+      });
+
+      const textWrap = document.createElement('div');
+      const name = document.createElement('div');
+      name.textContent = pat.name;
+      name.style.cssText = 'font-weight:600;font-size:.8rem;margin-bottom:2px;';
+      const desc = document.createElement('div');
+      desc.textContent = pat.description;
+      desc.style.cssText = 'font-size:.65rem;color:#888;';
+      textWrap.appendChild(name);
+      textWrap.appendChild(desc);
+
+      item.appendChild(cb);
+      item.appendChild(textWrap);
+      submenu.appendChild(item);
     });
 
-    const textWrap = document.createElement('div');
-    const name = document.createElement('div');
-    name.textContent = pat.name;
-    name.style.cssText = 'font-weight:600;font-size:.8rem;margin-bottom:2px;';
-    const desc = document.createElement('div');
-    desc.textContent = pat.description;
-    desc.style.cssText = 'font-size:.65rem;color:#888;';
-    textWrap.appendChild(name);
-    textWrap.appendChild(desc);
+    categoryRow.appendChild(submenu);
+  }
 
-    item.appendChild(cb);
-    item.appendChild(textWrap);
-    $dropdown.appendChild(item);
+  categoryOrder.forEach((cat, idx) => {
+    const patterns = grouped[cat];
+    const checkedCount = patterns.filter(p => patternState[p.id].checked).length;
+    const isLast = idx === categoryOrder.length - 1;
+
+    const row = document.createElement('div');
+    row.style.cssText = `position:relative;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;transition:background .15s;${isLast ? '' : 'border-bottom:1px solid #333;'}`;
+
+    const left = document.createElement('div');
+    const catName = document.createElement('div');
+    catName.textContent = cat;
+    catName.style.cssText = 'font-weight:600;font-size:.8rem;';
+    const catMeta = document.createElement('div');
+    catMeta.textContent = `${patterns.length}件${checkedCount > 0 ? ` / ${checkedCount}件選択中` : ''}`;
+    catMeta.style.cssText = `font-size:.65rem;color:${checkedCount > 0 ? '#E94560' : '#888'};margin-top:2px;`;
+    left.appendChild(catName);
+    left.appendChild(catMeta);
+
+    const arrow = document.createElement('span');
+    arrow.textContent = '▸';
+    arrow.style.cssText = 'color:#888;font-size:.7rem;margin-left:8px;';
+
+    row.appendChild(left);
+    row.appendChild(arrow);
+
+    row.addEventListener('mouseenter', () => {
+      openSubmenu(row, patterns);
+    });
+
+    $dropdown.appendChild(row);
   });
-  if ($dropdown.lastChild) $dropdown.lastChild.style.borderBottom = 'none';
+
+  // Close submenu when leaving the dropdown entirely
+  $dropdown.onmouseleave = closeSubmenu;
 }
 
 // ===== Toast =====
